@@ -47,9 +47,12 @@ class TaskRepo:
         rows = self.conn.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
         return [dict(r) for r in rows]
 
+    _UPDATABLE_FIELDS = {"name", "prompt", "cron_expression", "allowed_tools", "enabled"}
+
     def update(self, task_id: str, **fields) -> dict | None:
         if not fields:
             return self.get(task_id)
+        fields = {k: v for k, v in fields.items() if k in self._UPDATABLE_FIELDS}
         if "enabled" in fields and fields["enabled"] is not None:
             fields["enabled"] = int(fields["enabled"])
         updates = {k: v for k, v in fields.items() if v is not None}

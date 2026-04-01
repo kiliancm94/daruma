@@ -1,5 +1,20 @@
 import subprocess
 
+VALID_TOOLS = frozenset({
+    "Agent", "Bash", "Edit", "Glob", "Grep", "Read", "Write",
+    "NotebookEdit", "WebFetch", "WebSearch",
+})
+
+
+def validate_tools(tools_str: str) -> str:
+    """Validate tool names against allowlist to prevent CLI flag injection."""
+    tools = [t.strip() for t in tools_str.split(",") if t.strip()]
+    for t in tools:
+        base = t.split("(")[0]  # handle patterns like Bash(git:*)
+        if base.startswith("-") or base not in VALID_TOOLS:
+            raise ValueError(f"Invalid tool name: {t}")
+    return ",".join(tools)
+
 
 def run_claude(
     prompt: str,
@@ -8,7 +23,8 @@ def run_claude(
 ) -> dict:
     cmd = ["claude", "-p", "--permission-mode", "auto", prompt]
     if allowed_tools:
-        cmd.extend(["--allowedTools", allowed_tools])
+        validated = validate_tools(allowed_tools)
+        cmd.extend(["--tools", validated])
 
     try:
         result = subprocess.run(
