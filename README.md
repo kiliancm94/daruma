@@ -6,7 +6,7 @@ Lightweight task scheduler with a web UI that runs Claude CLI agents on cron sch
 
 | Component | Choice |
 |-----------|--------|
-| Backend | Python 3.12 + FastAPI |
+| Backend | Python 3.14 + FastAPI |
 | UI | Jinja2 + HTMX |
 | Database | SQLite |
 | Scheduler | APScheduler |
