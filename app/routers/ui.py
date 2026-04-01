@@ -107,3 +107,15 @@ def run_detail(
     if not run:
         raise HTTPException(404, "Run not found")
     return templates.TemplateResponse(request, "run_detail.html", {"run": run})
+
+
+@router.get("/runs/{run_id}/card", response_class=HTMLResponse)
+def run_card(
+    request: Request,
+    run_id: str,
+    repo: RunRepo = Depends(get_run_repo),
+):
+    run = repo.get(run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    return templates.TemplateResponse(request, "partials/run_card.html", {"run": run})

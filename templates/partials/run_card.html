@@ -1,0 +1,44 @@
+<div class="card mt-1">
+    <div style="display:flex; gap:2rem; margin-bottom:1rem;">
+        <div>
+            <span class="text-dim text-sm">Status</span><br>
+            {% if run.status == "success" %}
+                <span class="badge badge-success">success</span>
+            {% elif run.status == "failed" %}
+                <span class="badge badge-danger">failed</span>
+            {% else %}
+                <span class="badge badge-warning">running…</span>
+            {% endif %}
+        </div>
+        <div>
+            <span class="text-dim text-sm">Trigger</span><br>
+            {{ run.trigger }}
+        </div>
+        <div>
+            <span class="text-dim text-sm">Duration</span><br>
+            {{ (run.duration_ms / 1000)|round(1) if run.duration_ms else "—" }}s
+        </div>
+        <div>
+            <span class="text-dim text-sm">Exit Code</span><br>
+            {{ run.exit_code if run.exit_code is not none else "—" }}
+        </div>
+        <div>
+            <span class="text-dim text-sm">Started</span><br>
+            {{ run.started_at[:19] }}
+        </div>
+    </div>
+
+    {% if run.stdout %}
+    <div style="margin-bottom:1rem;">
+        <div class="text-dim text-sm" style="margin-bottom:0.35rem;">Output</div>
+        <div class="log-output">{{ run.stdout }}</div>
+    </div>
+    {% endif %}
+
+    {% if run.stderr %}
+    <div>
+        <div class="text-dim text-sm" style="margin-bottom:0.35rem;">Errors</div>
+        <div class="log-output" style="color:#e74c3c;">{{ run.stderr }}</div>
+    </div>
+    {% endif %}
+</div>
