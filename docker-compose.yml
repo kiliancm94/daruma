@@ -1,0 +1,13 @@
+services:
+  daruma:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - daruma-data:/data
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  daruma-data:
