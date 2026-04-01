@@ -1,0 +1,21 @@
+<tr id="task-{{ task.id }}">
+    <td><a href="/ui/tasks/{{ task.id }}">{{ task.name }}</a></td>
+    <td class="text-dim text-sm">{{ task.cron_expression or "—" }}</td>
+    <td>
+        {% if task.enabled %}
+            <span class="badge badge-success">enabled</span>
+        {% else %}
+            <span class="badge badge-dim">disabled</span>
+        {% endif %}
+    </td>
+    <td>
+        <button class="btn btn-sm"
+                hx-post="/api/tasks/{{ task.id }}/run"
+                hx-target="#task-{{ task.id }}"
+                hx-swap="outerHTML"
+                hx-indicator="#spinner-{{ task.id }}">
+            Run now
+        </button>
+        <span id="spinner-{{ task.id }}" class="htmx-indicator text-dim text-sm">running…</span>
+    </td>
+</tr>

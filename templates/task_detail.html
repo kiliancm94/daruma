@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ task.name }} — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>{{ task.name }}</h1>
+    <div>
+        <button class="btn btn-sm" hx-post="/api/tasks/{{ task.id }}/run" hx-swap="none"
+                onclick="setTimeout(()=>location.reload(), 1000)">Run now</button>
+        <a href="/ui/tasks/{{ task.id }}/edit" class="btn btn-sm">Edit</a>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="/api/tasks/{{ task.id }}"
+                hx-confirm="Delete this task?"
+                hx-swap="none"
+                onclick="setTimeout(()=>location.href='/ui/', 500)">Delete</button>
+    </div>
+</div>
+
+<div class="card mt-1">
+    <div class="text-dim text-sm" style="margin-bottom:0.5rem;">Prompt</div>
+    <div class="log-output">{{ task.prompt }}</div>
+    <div style="margin-top:1rem; display:flex; gap:2rem;">
+        <div><span class="text-dim text-sm">Schedule:</span> {{ task.cron_expression or "Manual only" }}</div>
+        <div><span class="text-dim text-sm">Tools:</span> {{ task.allowed_tools or "All" }}</div>
+        <div>
+            {% if task.enabled %}
+                <span class="badge badge-success">enabled</span>
+            {% else %}
+                <span class="badge badge-dim">disabled</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<h2 class="mt-1">Run History</h2>
+<table>
+    <thead><tr><th>Time</th><th>Status</th><th>Trigger</th><th>Duration</th></tr></thead>
+    <tbody>
+        {% for run in runs %}
+            {% include "partials/run_row.html" %}
+        {% endfor %}
+        {% if not runs %}
+            <tr><td colspan="4" class="text-dim text-sm" style="text-align:center; padding:1rem;">
+                No runs yet.
+            </td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
