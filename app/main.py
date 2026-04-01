@@ -25,8 +25,12 @@ def _execute_cron_task(task_id: str) -> None:
     if not task:
         return
     run = run_repo.create(task_id=task["id"], trigger="cron")
+    run_repo_for_output = RunRepo(_conn)
     result = run_claude(
-        task["prompt"], allowed_tools=task.get("allowed_tools"), run_id=run["id"]
+        task["prompt"],
+        allowed_tools=task.get("allowed_tools"),
+        run_id=run["id"],
+        on_output=lambda stdout: run_repo_for_output.update_output(run["id"], stdout),
     )
     status = "success" if result["exit_code"] == 0 else "failed"
     run_repo.complete(

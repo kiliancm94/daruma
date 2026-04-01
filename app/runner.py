@@ -1,5 +1,7 @@
 import subprocess
 import threading
+import time
+from typing import Callable
 
 VALID_TOOLS = frozenset({
     "Agent", "Bash", "Edit", "Glob", "Grep", "Read", "Write",
@@ -9,6 +11,9 @@ VALID_TOOLS = frozenset({
 # Track running processes by run_id for cancellation
 _active_processes: dict[str, subprocess.Popen] = {}
 _lock = threading.Lock()
+
+# How often to flush partial output to the callback (seconds)
+_FLUSH_INTERVAL = 2
 
 
 def validate_tools(tools_str: str) -> str:
@@ -26,6 +31,7 @@ def run_claude(
     allowed_tools: str | None = None,
     timeout: int = 300,
     run_id: str | None = None,
+    on_output: Callable[[str], None] | None = None,
 ) -> dict:
     cmd = ["claude", "-p", "--permission-mode", "auto", prompt]
     if allowed_tools:
@@ -41,7 +47,13 @@ def run_claude(
                 _active_processes[run_id] = proc
 
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            if on_output:
+                stdout = _stream_output(proc, timeout, on_output)
+            else:
+                stdout, _ = proc.communicate(timeout=timeout)
+
+            stderr = proc.stderr.read() if proc.stderr else ""
+            proc.wait()
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
@@ -66,6 +78,32 @@ def run_claude(
             "stdout": "",
             "stderr": "claude CLI not found",
         }
+
+
+def _stream_output(
+    proc: subprocess.Popen,
+    timeout: int,
+    on_output: Callable[[str], None],
+) -> str:
+    """Read stdout line-by-line, flushing to callback every _FLUSH_INTERVAL seconds."""
+    lines: list[str] = []
+    last_flush = time.monotonic()
+    deadline = time.monotonic() + timeout
+
+    for line in proc.stdout:
+        lines.append(line)
+        now = time.monotonic()
+        if now > deadline:
+            proc.kill()
+            raise subprocess.TimeoutExpired(cmd="claude", timeout=timeout)
+        if now - last_flush >= _FLUSH_INTERVAL:
+            on_output("".join(lines))
+            last_flush = now
+
+    # Final flush with complete output
+    output = "".join(lines)
+    on_output(output)
+    return output
 
 
 def cancel_run(run_id: str) -> bool:

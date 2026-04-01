@@ -90,6 +90,13 @@ class RunRepo:
         row = self.conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         return _row_to_dict(row)
 
+    def update_output(self, run_id: str, stdout: str) -> None:
+        """Update partial stdout while a run is still in progress."""
+        self.conn.execute(
+            "UPDATE runs SET stdout = ? WHERE id = ?", (stdout, run_id)
+        )
+        self.conn.commit()
+
     def complete(
         self, run_id: str, status: str, stdout: str, stderr: str, exit_code: int
     ) -> dict | None:

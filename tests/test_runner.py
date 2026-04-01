@@ -8,6 +8,9 @@ from app.runner import run_claude, validate_tools
 def _make_popen_mock(returncode=0, stdout="response", stderr=""):
     proc = MagicMock()
     proc.communicate.return_value = (stdout, stderr)
+    proc.stdout = iter(stdout.splitlines(keepends=True)) if stdout else iter([])
+    proc.stderr = MagicMock()
+    proc.stderr.read.return_value = stderr
     proc.returncode = returncode
     proc.kill = MagicMock()
     proc.wait = MagicMock()
@@ -64,8 +67,18 @@ def test_run_claude_tracks_process(mock_popen):
     from app.runner import _active_processes
     mock_popen.return_value = _make_popen_mock()
     run_claude("Track me", run_id="test-run-123")
-    # Process should be cleaned up after completion
     assert "test-run-123" not in _active_processes
+
+
+@patch("app.runner._FLUSH_INTERVAL", 0)
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_streams_output(mock_popen):
+    mock_popen.return_value = _make_popen_mock(stdout="line1\nline2\nline3\n")
+    captured = []
+    result = run_claude("Stream me", on_output=lambda s: captured.append(s))
+    assert result["stdout"] == "line1\nline2\nline3\n"
+    assert len(captured) > 0
+    assert captured[-1] == "line1\nline2\nline3\n"
 
 
 # --- Tool validation tests ---
