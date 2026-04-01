@@ -2,7 +2,7 @@
 name = "daruma"
 version = "0.1.0"
 description = "Docker-based task scheduler for Claude CLI automations"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
