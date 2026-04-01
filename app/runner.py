@@ -6,7 +6,7 @@ def run_claude(
     allowed_tools: str | None = None,
     timeout: int = 300,
 ) -> dict:
-    cmd = ["claude", "-p", prompt]
+    cmd = ["claude", "-p", "--permission-mode", "auto", prompt]
     if allowed_tools:
         cmd.extend(["--allowedTools", allowed_tools])
 

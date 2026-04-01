@@ -15,8 +15,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / 
 
 
 @router.get("/", response_class=HTMLResponse)
-def tasks_list(request: Request, repo: TaskRepo = Depends(get_task_repo)):
-    tasks = repo.list()
+def tasks_list(
+    request: Request,
+    task_repo: TaskRepo = Depends(get_task_repo),
+    run_repo: RunRepo = Depends(get_run_repo),
+):
+    tasks = task_repo.list()
+    for task in tasks:
+        task["last_run"] = run_repo.last_run(task["id"])
     return templates.TemplateResponse(request, "tasks_list.html", {"tasks": tasks})
 
 

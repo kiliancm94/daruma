@@ -9,13 +9,24 @@
         {% endif %}
     </td>
     <td>
+        {% if task.last_run %}
+            {% if task.last_run.status == "success" %}
+                <span class="badge badge-success">success</span>
+            {% elif task.last_run.status == "failed" %}
+                <span class="badge badge-danger">failed</span>
+            {% else %}
+                <span class="badge badge-warning">running…</span>
+            {% endif %}
+            <span class="text-dim text-sm">{{ task.last_run.started_at[:16] }}</span>
+        {% else %}
+            <span class="text-dim text-sm">—</span>
+        {% endif %}
+    </td>
+    <td>
         <button class="btn btn-sm"
                 hx-post="/api/tasks/{{ task.id }}/run"
-                hx-target="#task-{{ task.id }}"
-                hx-swap="outerHTML"
-                hx-indicator="#spinner-{{ task.id }}">
+                hx-swap="none">
             Run now
         </button>
-        <span id="spinner-{{ task.id }}" class="htmx-indicator text-dim text-sm">running…</span>
     </td>
 </tr>

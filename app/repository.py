@@ -107,6 +107,13 @@ class RunRepo:
         self.conn.commit()
         return _row_to_dict(self.get(run_id))
 
+    def last_run(self, task_id: str) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM runs WHERE task_id = ? ORDER BY started_at DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        return _row_to_dict(row)
+
     def list(self, task_id: str | None = None) -> list[dict]:
         if task_id:
             rows = self.conn.execute(
