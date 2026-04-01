@@ -1,10 +1,11 @@
+import threading
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models import RunResponse
 from app.repository import TaskRepo, RunRepo
-from app.runner import run_claude
+from app.runner import run_claude, cancel_run
 
 router = APIRouter(tags=["triggers"])
 
@@ -21,14 +22,18 @@ def get_runner() -> Callable:
     return run_claude
 
 
-def _execute_task(
-    task: dict, trigger: str, run_repo: RunRepo, runner: Callable
-) -> dict:
-    run = run_repo.create(task_id=task["id"], trigger=trigger)
-    result = runner(task["prompt"], allowed_tools=task.get("allowed_tools"))
+def _execute_task_bg(
+    task: dict, run_id: str, runner: Callable, run_repo: RunRepo
+) -> None:
+    """Run Claude in background thread and update the run record when done."""
+    result = runner(
+        task["prompt"],
+        allowed_tools=task.get("allowed_tools"),
+        run_id=run_id,
+    )
     status = "success" if result["exit_code"] == 0 else "failed"
-    return run_repo.complete(
-        run["id"],
+    run_repo.complete(
+        run_id,
         status=status,
         stdout=result["stdout"],
         stderr=result["stderr"],
@@ -46,7 +51,13 @@ def manual_trigger(
     task = task_repo.get(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
-    return _execute_task(task, "manual", run_repo, runner)
+    run = run_repo.create(task_id=task["id"], trigger="manual")
+    threading.Thread(
+        target=_execute_task_bg,
+        args=(task, run["id"], runner, run_repo),
+        daemon=True,
+    ).start()
+    return run
 
 
 @router.post("/api/trigger/{task_name}", response_model=RunResponse)
@@ -59,4 +70,27 @@ def webhook_trigger(
     task = task_repo.get_by_name(task_name)
     if not task:
         raise HTTPException(404, "Task not found")
-    return _execute_task(task, "webhook", run_repo, runner)
+    run = run_repo.create(task_id=task["id"], trigger="webhook")
+    threading.Thread(
+        target=_execute_task_bg,
+        args=(task, run["id"], runner, run_repo),
+        daemon=True,
+    ).start()
+    return run
+
+
+@router.post("/api/runs/{run_id}/cancel")
+def cancel_run_endpoint(
+    run_id: str,
+    run_repo: RunRepo = Depends(get_run_repo),
+):
+    run = run_repo.get(run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run["status"] != "running":
+        raise HTTPException(400, "Run is not active")
+    killed = cancel_run(run_id)
+    if not killed:
+        # Process already finished between check and kill
+        run_repo.complete(run_id, status="failed", stdout="", stderr="Cancelled", exit_code=-1)
+    return {"status": "cancelled"}

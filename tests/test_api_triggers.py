@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from unittest.mock import MagicMock
 from fastapi import FastAPI
@@ -32,13 +34,17 @@ def client(app):
 
 
 def test_manual_trigger(client, repos):
-    task_repo, _ = repos
+    task_repo, run_repo = repos
     task = task_repo.create(name="T", prompt="Run me")
     resp = client.post(f"/api/tasks/{task['id']}/run")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "success"
+    assert data["status"] == "running"
     assert data["trigger"] == "manual"
+    # Wait for background thread to complete
+    time.sleep(0.1)
+    run = run_repo.get(data["id"])
+    assert run["status"] == "success"
 
 
 def test_manual_trigger_not_found(client):
@@ -47,12 +53,16 @@ def test_manual_trigger_not_found(client):
 
 
 def test_webhook_trigger(client, repos):
-    task_repo, _ = repos
+    task_repo, run_repo = repos
     task_repo.create(name="my-webhook", prompt="Webhook prompt")
     resp = client.post("/api/trigger/my-webhook")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["status"] == "running"
     assert data["trigger"] == "webhook"
+    time.sleep(0.1)
+    run = run_repo.get(data["id"])
+    assert run["status"] == "success"
 
 
 def test_webhook_trigger_not_found(client):

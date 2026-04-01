@@ -8,6 +8,9 @@
                 <span class="badge badge-danger">failed</span>
             {% else %}
                 <span class="badge badge-warning">running…</span>
+                <button class="btn btn-sm btn-danger" style="margin-left:0.5rem;"
+                        hx-post="/api/runs/{{ run.id }}/cancel"
+                        hx-swap="none">Stop</button>
             {% endif %}
         </div>
         <div>
