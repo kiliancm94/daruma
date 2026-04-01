@@ -17,12 +17,12 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / 
 @router.get("/", response_class=HTMLResponse)
 def tasks_list(request: Request, repo: TaskRepo = Depends(get_task_repo)):
     tasks = repo.list()
-    return templates.TemplateResponse("tasks_list.html", {"request": request, "tasks": tasks})
+    return templates.TemplateResponse(request, "tasks_list.html", {"tasks": tasks})
 
 
 @router.get("/tasks/new", response_class=HTMLResponse)
 def task_form_new(request: Request):
-    return templates.TemplateResponse("task_form.html", {"request": request, "task": None})
+    return templates.TemplateResponse(request, "task_form.html", {"task": None})
 
 
 @router.post("/tasks", response_class=HTMLResponse)
@@ -55,9 +55,7 @@ def task_detail(
     if not task:
         raise HTTPException(404, "Task not found")
     runs = run_repo.list(task_id=task_id)
-    return templates.TemplateResponse("task_detail.html", {
-        "request": request, "task": task, "runs": runs,
-    })
+    return templates.TemplateResponse(request, "task_detail.html", {"task": task, "runs": runs})
 
 
 @router.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
@@ -69,7 +67,7 @@ def task_edit_form(
     task = repo.get(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
-    return templates.TemplateResponse("task_form.html", {"request": request, "task": task})
+    return templates.TemplateResponse(request, "task_form.html", {"task": task})
 
 
 @router.post("/tasks/{task_id}", response_class=HTMLResponse)
@@ -102,4 +100,4 @@ def run_detail(
     run = repo.get(run_id)
     if not run:
         raise HTTPException(404, "Run not found")
-    return templates.TemplateResponse("run_detail.html", {"request": request, "run": run})
+    return templates.TemplateResponse(request, "run_detail.html", {"run": run})

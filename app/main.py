@@ -43,7 +43,7 @@ def _refresh_scheduler() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _conn, _scheduler
-    _conn = init_db(DB_PATH)
+    _conn = init_db(DB_PATH, check_same_thread=False)
     _scheduler = create_scheduler()
 
     # Wire up dependency overrides
