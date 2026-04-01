@@ -13,6 +13,6 @@ def db_path(tmp_path: Path) -> Path:
 def db_conn(db_path: Path) -> sqlite3.Connection:
     from app.db import init_db
 
-    conn = init_db(db_path)
+    conn = init_db(db_path, check_same_thread=False)
     yield conn
     conn.close()
