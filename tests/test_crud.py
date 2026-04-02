@@ -71,6 +71,33 @@ class TestTaskCrud:
         updated = task_crud.update(db_session, task.id, model="haiku")
         assert updated.model == "haiku"
 
+    def test_create_with_output_config(self, db_session):
+        task = task_crud.create(
+            db_session,
+            name="Output Task",
+            prompt="p",
+            output_format="md",
+            output_destination="/tmp/reports/",
+        )
+        assert task.output_format == "md"
+        assert task.output_destination == "/tmp/reports/"
+
+    def test_create_output_defaults_to_none(self, db_session):
+        task = task_crud.create(db_session, name="No Output", prompt="p")
+        assert task.output_format is None
+        assert task.output_destination is None
+
+    def test_update_output_config(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        updated = task_crud.update(
+            db_session,
+            task.id,
+            output_format="json",
+            output_destination="/tmp/out.json",
+        )
+        assert updated.output_format == "json"
+        assert updated.output_destination == "/tmp/out.json"
+
 
 class TestRunCrud:
     def _make_task(self, db_session):

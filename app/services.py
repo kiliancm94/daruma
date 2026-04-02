@@ -1,6 +1,9 @@
 """Service layer — shared business logic for FastAPI routes and CLI."""
 
+import json
 import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -40,6 +43,8 @@ class TaskService:
         allowed_tools: str | None = None,
         model: str = "sonnet",
         enabled: bool = True,
+        output_format: str | None = None,
+        output_destination: str | None = None,
     ) -> Task:
         return task_crud.create(
             self.session,
@@ -49,6 +54,8 @@ class TaskService:
             allowed_tools=allowed_tools,
             model=model,
             enabled=enabled,
+            output_format=output_format,
+            output_destination=output_destination,
         )
 
     def get(self, task_id: str) -> Task:
@@ -93,6 +100,60 @@ class RunService:
         return run_crud.get_last(self.session, task_id)
 
 
+# ── Output writing ─────────────────────────────────────────────────────────────
+
+_EXT = {"text": "txt", "json": "json", "md": "md"}
+
+
+def _format_output(stdout: str, fmt: str, task_name: str, run_id: str) -> str:
+    """Format run stdout according to the task's output_format."""
+    if fmt == "json":
+        return json.dumps(
+            {
+                "task": task_name,
+                "run_id": run_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "output": stdout,
+            },
+            indent=2,
+        )
+    if fmt == "md":
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        return f"# {task_name}\n\n_Run {run_id[:8]} — {ts}_\n\n{stdout}\n"
+    return stdout  # "text" or None → raw
+
+
+def _write_output(stdout: str, task: Task, run_id: str) -> None:
+    """Write run output to a file if output_destination is configured.
+
+    Destination can be:
+    - A file path: written directly (overwritten each run)
+    - A directory path (ends with / or has no extension): timestamped file created inside
+    - "pipe": no file written; output is stored in Run.stdout for future task chaining
+    """
+    dest = task.output_destination
+    if not dest or dest == "pipe":
+        return
+
+    fmt = task.output_format or "text"
+    content = _format_output(stdout, fmt, task.name, run_id)
+    ext = _EXT.get(fmt, "txt")
+
+    path = Path(dest)
+    # Treat as directory if it ends with / or has no suffix
+    if dest.endswith("/") or not path.suffix:
+        path.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        path = path / f"{task.name}_{ts}.{ext}"
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    path.write_text(content, encoding="utf-8")
+
+
+# ── Task execution ─────────────────────────────────────────────────────────────
+
+
 def execute_task(
     task: Task,
     session: Session,
@@ -126,7 +187,7 @@ def execute_task(
             on_output=_combined,
         )
         status = "success" if result["exit_code"] == 0 else "failed"
-        return run_crud.complete(
+        completed = run_crud.complete(
             session,
             run_id,
             status=status,
@@ -135,6 +196,9 @@ def execute_task(
             exit_code=result["exit_code"],
             activity=result.get("activity", ""),
         )
+        if status == "success":
+            _write_output(result["stdout"], task, run_id)
+        return completed
     except Exception as e:
         return run_crud.complete(
             session, run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
@@ -160,9 +224,7 @@ def execute_task_background(
     threading.Thread(
         target=_background_worker,
         args=(
-            task.prompt,
-            task.allowed_tools,
-            task.model,
+            task,
             run.id,
             runner,
             session_factory,
@@ -173,9 +235,7 @@ def execute_task_background(
 
 
 def _background_worker(
-    prompt: str,
-    allowed_tools: str | None,
-    model: str,
+    task: Task,
     run_id: str,
     runner: Callable,
     session_factory: sessionmaker,
@@ -183,9 +243,9 @@ def _background_worker(
     session = session_factory()
     try:
         result = runner(
-            prompt,
-            allowed_tools=allowed_tools,
-            model=model,
+            task.prompt,
+            allowed_tools=task.allowed_tools,
+            model=task.model,
             run_id=run_id,
             on_output=lambda stdout, activity: run_crud.update_output(
                 session, run_id, stdout, activity
@@ -201,6 +261,8 @@ def _background_worker(
             exit_code=result["exit_code"],
             activity=result.get("activity", ""),
         )
+        if status == "success":
+            _write_output(result["stdout"], task, run_id)
     except Exception as e:
         run_crud.complete(
             session, run_id, status="failed", stdout="", stderr=str(e), exit_code=-1

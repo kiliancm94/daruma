@@ -16,6 +16,8 @@ def create(
     allowed_tools: str | None = None,
     model: str = "sonnet",
     enabled: bool = True,
+    output_format: str | None = None,
+    output_destination: str | None = None,
 ) -> Task:
     task = Task(
         name=name,
@@ -24,6 +26,8 @@ def create(
         allowed_tools=allowed_tools,
         model=model,
         enabled=enabled,
+        output_format=output_format,
+        output_destination=output_destination,
     )
     session.add(task)
     session.commit()
