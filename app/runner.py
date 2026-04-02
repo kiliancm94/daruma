@@ -4,10 +4,20 @@ import threading
 import time
 from typing import Callable
 
-VALID_TOOLS = frozenset({
-    "Agent", "Bash", "Edit", "Glob", "Grep", "Read", "Write",
-    "NotebookEdit", "WebFetch", "WebSearch",
-})
+VALID_TOOLS = frozenset(
+    {
+        "Agent",
+        "Bash",
+        "Edit",
+        "Glob",
+        "Grep",
+        "Read",
+        "Write",
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch",
+    }
+)
 
 # Track running processes by run_id for cancellation
 _active_processes: dict[str, subprocess.Popen] = {}
@@ -33,7 +43,7 @@ def validate_tools(tools_str: str) -> str:
         if canonical is None:
             raise ValueError(f"Invalid tool name: {t}")
         # Preserve pattern suffix like Bash(git:*)
-        suffix = t[len(base):]
+        suffix = t[len(base) :]
         normalized.append(canonical + suffix)
     return ",".join(normalized)
 
@@ -46,9 +56,12 @@ def run_claude(
     on_output: Callable[[str], None] | None = None,
 ) -> dict:
     cmd = [
-        "claude", "-p",
-        "--permission-mode", "auto",
-        "--output-format", "stream-json",
+        "claude",
+        "-p",
+        "--permission-mode",
+        "auto",
+        "--output-format",
+        "stream-json",
         "--verbose",
         prompt,
     ]
