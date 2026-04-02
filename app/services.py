@@ -86,10 +86,12 @@ def execute_task(
     task: dict,
     run_repo: RunRepo,
     trigger: str = "manual",
-    runner: Callable = run_claude,
+    runner: Callable | None = None,
     on_output: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Execute a task synchronously. Returns the completed run dict."""
+    if runner is None:
+        runner = run_claude
     run = run_repo.create(task_id=task["id"], trigger=trigger)
     run_id = run["id"]
 
@@ -127,9 +129,11 @@ def execute_task_bg(
     task: dict,
     run_repo: RunRepo,
     trigger: str = "manual",
-    runner: Callable = run_claude,
+    runner: Callable | None = None,
 ) -> dict:
     """Execute a task in a background thread. Returns the initial run dict (status=running)."""
+    if runner is None:
+        runner = run_claude
     run = run_repo.create(task_id=task["id"], trigger=trigger)
     threading.Thread(
         target=_bg_worker,
