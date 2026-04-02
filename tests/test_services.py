@@ -112,7 +112,7 @@ class TestExecuteTask:
     def test_success(self, task_svc, run_repo):
         task = task_svc.create(name="T", prompt="p")
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": ""}
+            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
         )
         result = execute_task(task, run_repo, runner=mock_runner)
         assert result["status"] == "success"
@@ -121,7 +121,7 @@ class TestExecuteTask:
     def test_failure(self, task_svc, run_repo):
         task = task_svc.create(name="T", prompt="p")
         mock_runner = MagicMock(
-            return_value={"exit_code": 1, "stdout": "", "stderr": "err"}
+            return_value={"exit_code": 1, "stdout": "", "stderr": "err", "activity": ""}
         )
         result = execute_task(task, run_repo, runner=mock_runner)
         assert result["status"] == "failed"
@@ -139,12 +139,15 @@ class TestExecuteTask:
         task = task_svc.create(name="T", prompt="p")
         output_calls = []
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": ""}
+            return_value={
+                "exit_code": 0, "stdout": "done", "stderr": "", "activity": ""
+            }
         )
-        execute_task(
-            task, run_repo, runner=mock_runner, on_output=output_calls.append
-        )
-        # on_output is passed to runner, so runner receives it via on_output kwarg
+
+        def capture(stdout: str, activity: str) -> None:
+            output_calls.append((stdout, activity))
+
+        execute_task(task, run_repo, runner=mock_runner, on_output=capture)
         mock_runner.assert_called_once()
 
 
@@ -155,7 +158,7 @@ class TestExecuteTaskBg:
     def test_returns_running(self, task_svc, run_repo):
         task = task_svc.create(name="T", prompt="p")
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": ""}
+            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
         )
         run = execute_task_bg(task, run_repo, runner=mock_runner)
         assert run["status"] == "running"

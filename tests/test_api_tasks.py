@@ -2,20 +2,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.db import init_db
 from app.repository import TaskRepo
-from app.routers.tasks import router, get_task_repo
+from app.services import TaskService
+from app.routers.tasks import router, get_task_service
 
 
 @pytest.fixture
 def app(db_conn):
     app = FastAPI()
     app.include_router(router)
-
-    def override_repo():
-        return TaskRepo(db_conn)
-
-    app.dependency_overrides[get_task_repo] = override_repo
+    app.dependency_overrides[get_task_service] = lambda: TaskService(TaskRepo(db_conn))
     return app
 
 

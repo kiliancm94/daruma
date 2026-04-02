@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.repository import TaskRepo, RunRepo
-from app.routers.runs import router, get_run_repo
+from app.services import RunService
+from app.routers.runs import router, get_run_service
 
 
 @pytest.fixture
@@ -16,7 +17,7 @@ def app(repos):
     app = FastAPI()
     app.include_router(router)
     _, run_repo = repos
-    app.dependency_overrides[get_run_repo] = lambda: run_repo
+    app.dependency_overrides[get_run_service] = lambda: RunService(run_repo)
     return app
 
 

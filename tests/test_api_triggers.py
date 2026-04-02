@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.repository import TaskRepo, RunRepo
-from app.routers.triggers import router, get_task_repo, get_run_repo, get_runner
+from app.services import TaskService
+from app.routers.triggers import router, get_task_service, get_run_repo, get_runner
 
 
 @pytest.fixture
@@ -20,9 +21,11 @@ def app(repos):
     app.include_router(router)
     task_repo, run_repo = repos
 
-    mock_runner = MagicMock(return_value={"exit_code": 0, "stdout": "done", "stderr": ""})
+    mock_runner = MagicMock(
+        return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
+    )
 
-    app.dependency_overrides[get_task_repo] = lambda: task_repo
+    app.dependency_overrides[get_task_service] = lambda: TaskService(task_repo)
     app.dependency_overrides[get_run_repo] = lambda: run_repo
     app.dependency_overrides[get_runner] = lambda: mock_runner
     return app

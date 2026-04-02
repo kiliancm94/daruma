@@ -6,23 +6,31 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.repository import TaskRepo, RunRepo
-from app.routers.tasks import get_task_repo
-from app.routers.runs import get_run_repo
+from app.services import TaskService, RunService, TaskNotFoundError, RunNotFoundError
 
 router = APIRouter(prefix="/ui", tags=["ui"])
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
+templates = Jinja2Templates(
+    directory=str(Path(__file__).parent.parent.parent / "templates")
+)
+
+
+def get_task_service() -> TaskService:
+    raise RuntimeError("not configured")
+
+
+def get_run_service() -> RunService:
+    raise RuntimeError("not configured")
 
 
 @router.get("/", response_class=HTMLResponse)
 def tasks_list(
     request: Request,
-    task_repo: TaskRepo = Depends(get_task_repo),
-    run_repo: RunRepo = Depends(get_run_repo),
+    task_svc: TaskService = Depends(get_task_service),
+    run_svc: RunService = Depends(get_run_service),
 ):
-    tasks = task_repo.list()
+    tasks = task_svc.list()
     for task in tasks:
-        task["last_run"] = run_repo.last_run(task["id"])
+        task["last_run"] = run_svc.last_run(task["id"])
     return templates.TemplateResponse(request, "tasks_list.html", {"tasks": tasks})
 
 
@@ -38,9 +46,9 @@ def task_create_form(
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
     enabled: str = Form(""),
-    repo: TaskRepo = Depends(get_task_repo),
+    svc: TaskService = Depends(get_task_service),
 ):
-    repo.create(
+    svc.create(
         name=name,
         prompt=prompt,
         cron_expression=cron_expression or None,
@@ -54,24 +62,28 @@ def task_create_form(
 def task_detail(
     request: Request,
     task_id: str,
-    task_repo: TaskRepo = Depends(get_task_repo),
-    run_repo: RunRepo = Depends(get_run_repo),
+    task_svc: TaskService = Depends(get_task_service),
+    run_svc: RunService = Depends(get_run_service),
 ):
-    task = task_repo.get(task_id)
-    if not task:
+    try:
+        task = task_svc.get(task_id)
+    except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    runs = run_repo.list(task_id=task_id)
-    return templates.TemplateResponse(request, "task_detail.html", {"task": task, "runs": runs})
+    runs = run_svc.list(task_id=task_id)
+    return templates.TemplateResponse(
+        request, "task_detail.html", {"task": task, "runs": runs}
+    )
 
 
 @router.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
 def task_edit_form(
     request: Request,
     task_id: str,
-    repo: TaskRepo = Depends(get_task_repo),
+    svc: TaskService = Depends(get_task_service),
 ):
-    task = repo.get(task_id)
-    if not task:
+    try:
+        task = svc.get(task_id)
+    except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     return templates.TemplateResponse(request, "task_form.html", {"task": task})
 
@@ -84,16 +96,19 @@ def task_update_form(
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
     enabled: str = Form(""),
-    repo: TaskRepo = Depends(get_task_repo),
+    svc: TaskService = Depends(get_task_service),
 ):
-    repo.update(
-        task_id,
-        name=name,
-        prompt=prompt,
-        cron_expression=cron_expression or None,
-        allowed_tools=allowed_tools or None,
-        enabled=bool(enabled),
-    )
+    try:
+        svc.update(
+            task_id,
+            name=name,
+            prompt=prompt,
+            cron_expression=cron_expression or None,
+            allowed_tools=allowed_tools or None,
+            enabled=bool(enabled),
+        )
+    except TaskNotFoundError:
+        raise HTTPException(404, "Task not found")
     return RedirectResponse(f"/ui/tasks/{task_id}", status_code=303)
 
 
@@ -101,10 +116,11 @@ def task_update_form(
 def run_detail(
     request: Request,
     run_id: str,
-    repo: RunRepo = Depends(get_run_repo),
+    svc: RunService = Depends(get_run_service),
 ):
-    run = repo.get(run_id)
-    if not run:
+    try:
+        run = svc.get(run_id)
+    except RunNotFoundError:
         raise HTTPException(404, "Run not found")
     return templates.TemplateResponse(request, "run_detail.html", {"run": run})
 
@@ -113,9 +129,12 @@ def run_detail(
 def run_card(
     request: Request,
     run_id: str,
-    repo: RunRepo = Depends(get_run_repo),
+    svc: RunService = Depends(get_run_service),
 ):
-    run = repo.get(run_id)
-    if not run:
+    try:
+        run = svc.get(run_id)
+    except RunNotFoundError:
         raise HTTPException(404, "Run not found")
-    return templates.TemplateResponse(request, "partials/run_card.html", {"run": run})
+    return templates.TemplateResponse(
+        request, "partials/run_card.html", {"run": run}
+    )

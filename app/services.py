@@ -78,25 +78,28 @@ class RunService:
             raise RunNotFoundError(run_id)
         return run
 
+    def last_run(self, task_id: str) -> dict | None:
+        return self.repo.last_run(task_id)
+
 
 def execute_task(
     task: dict,
     run_repo: RunRepo,
     trigger: str = "manual",
     runner: Callable = run_claude,
-    on_output: Callable[[str], None] | None = None,
+    on_output: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Execute a task synchronously. Returns the completed run dict."""
     run = run_repo.create(task_id=task["id"], trigger=trigger)
     run_id = run["id"]
 
     if on_output:
-        def _combined(stdout: str) -> None:
-            run_repo.update_output(run_id, stdout)
-            on_output(stdout)
+        def _combined(stdout: str, activity: str) -> None:
+            run_repo.update_output(run_id, stdout, activity)
+            on_output(stdout, activity)
     else:
-        def _combined(stdout: str) -> None:
-            run_repo.update_output(run_id, stdout)
+        def _combined(stdout: str, activity: str) -> None:
+            run_repo.update_output(run_id, stdout, activity)
 
     try:
         result = runner(
@@ -112,6 +115,7 @@ def execute_task(
             stdout=result["stdout"],
             stderr=result["stderr"],
             exit_code=result["exit_code"],
+            activity=result.get("activity", ""),
         )
     except Exception as e:
         return run_repo.complete(
@@ -141,7 +145,9 @@ def _bg_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> 
             task["prompt"],
             allowed_tools=task.get("allowed_tools"),
             run_id=run_id,
-            on_output=lambda stdout: run_repo.update_output(run_id, stdout),
+            on_output=lambda stdout, activity: run_repo.update_output(
+                run_id, stdout, activity
+            ),
         )
         status = "success" if result["exit_code"] == 0 else "failed"
         run_repo.complete(
@@ -150,6 +156,7 @@ def _bg_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> 
             stdout=result["stdout"],
             stderr=result["stderr"],
             exit_code=result["exit_code"],
+            activity=result.get("activity", ""),
         )
     except Exception as e:
         run_repo.complete(

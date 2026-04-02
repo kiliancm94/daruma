@@ -9,6 +9,7 @@ from app.db import init_db
 from app.repository import TaskRepo, RunRepo
 from app.runner import run_claude
 from app.scheduler import create_scheduler, sync_jobs
+from app.services import TaskService, RunService, execute_task
 from app.routers import tasks as tasks_router
 from app.routers import runs as runs_router
 from app.routers import triggers as triggers_router
@@ -24,21 +25,7 @@ def _execute_cron_task(task_id: str) -> None:
     task = task_repo.get(task_id)
     if not task:
         return
-    run = run_repo.create(task_id=task["id"], trigger="cron")
-    run_repo_for_output = RunRepo(_conn)
-    result = run_claude(
-        task["prompt"],
-        allowed_tools=task.get("allowed_tools"),
-        run_id=run["id"],
-        on_output=lambda stdout, activity: run_repo_for_output.update_output(run["id"], stdout, activity),
-    )
-    status = "success" if result["exit_code"] == 0 else "failed"
-    run_repo.complete(
-        run["id"], status=status,
-        stdout=result["stdout"], stderr=result["stderr"],
-        exit_code=result["exit_code"],
-        activity=result.get("activity", ""),
-    )
+    execute_task(task, run_repo, trigger="cron")
 
 
 def _refresh_scheduler() -> None:
@@ -53,12 +40,18 @@ async def lifespan(app: FastAPI):
     _conn = init_db(DB_PATH, check_same_thread=False)
     _scheduler = create_scheduler()
 
+    task_service = TaskService(TaskRepo(_conn))
+    run_service = RunService(RunRepo(_conn))
+    run_repo = RunRepo(_conn)
+
     # Wire up dependency overrides
-    app.dependency_overrides[tasks_router.get_task_repo] = lambda: TaskRepo(_conn)
-    app.dependency_overrides[runs_router.get_run_repo] = lambda: RunRepo(_conn)
-    app.dependency_overrides[triggers_router.get_task_repo] = lambda: TaskRepo(_conn)
-    app.dependency_overrides[triggers_router.get_run_repo] = lambda: RunRepo(_conn)
+    app.dependency_overrides[tasks_router.get_task_service] = lambda: task_service
+    app.dependency_overrides[runs_router.get_run_service] = lambda: run_service
+    app.dependency_overrides[triggers_router.get_task_service] = lambda: task_service
+    app.dependency_overrides[triggers_router.get_run_repo] = lambda: run_repo
     app.dependency_overrides[triggers_router.get_runner] = lambda: run_claude
+    app.dependency_overrides[ui_router.get_task_service] = lambda: task_service
+    app.dependency_overrides[ui_router.get_run_service] = lambda: run_service
 
     _refresh_scheduler()
     _scheduler.start()
