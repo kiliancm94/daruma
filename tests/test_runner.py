@@ -119,6 +119,12 @@ def test_validate_tools_accepts_valid():
     assert validate_tools("Bash, Read, Edit") == "Bash,Read,Edit"
 
 
+def test_validate_tools_normalizes_case():
+    assert validate_tools("bash,read") == "Bash,Read"
+    assert validate_tools("WRITE") == "Write"
+    assert validate_tools("bash, read, edit") == "Bash,Read,Edit"
+
+
 def test_validate_tools_accepts_patterns():
     assert validate_tools("Bash(git:*)") == "Bash(git:*)"
 

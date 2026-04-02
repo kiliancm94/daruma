@@ -17,14 +17,25 @@ _lock = threading.Lock()
 _FLUSH_INTERVAL = 2
 
 
+_TOOLS_LOWER = {t.lower(): t for t in VALID_TOOLS}
+
+
 def validate_tools(tools_str: str) -> str:
-    """Validate tool names against allowlist to prevent CLI flag injection."""
+    """Validate and normalize tool names against allowlist."""
     tools = [t.strip() for t in tools_str.split(",") if t.strip()]
+    normalized = []
     for t in tools:
         base = t.split("(")[0]
-        if base.startswith("-") or base not in VALID_TOOLS:
+        if base.startswith("-"):
             raise ValueError(f"Invalid tool name: {t}")
-    return ",".join(tools)
+        # Accept case-insensitive, normalize to canonical form
+        canonical = _TOOLS_LOWER.get(base.lower())
+        if canonical is None:
+            raise ValueError(f"Invalid tool name: {t}")
+        # Preserve pattern suffix like Bash(git:*)
+        suffix = t[len(base):]
+        normalized.append(canonical + suffix)
+    return ",".join(normalized)
 
 
 def run_claude(

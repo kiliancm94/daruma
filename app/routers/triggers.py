@@ -26,20 +26,25 @@ def _execute_task_bg(
     task: dict, run_id: str, runner: Callable, run_repo: RunRepo
 ) -> None:
     """Run Claude in background thread and update the run record when done."""
-    result = runner(
-        task["prompt"],
-        allowed_tools=task.get("allowed_tools"),
-        run_id=run_id,
-        on_output=lambda stdout: run_repo.update_output(run_id, stdout),
-    )
-    status = "success" if result["exit_code"] == 0 else "failed"
-    run_repo.complete(
-        run_id,
-        status=status,
-        stdout=result["stdout"],
-        stderr=result["stderr"],
-        exit_code=result["exit_code"],
-    )
+    try:
+        result = runner(
+            task["prompt"],
+            allowed_tools=task.get("allowed_tools"),
+            run_id=run_id,
+            on_output=lambda stdout: run_repo.update_output(run_id, stdout),
+        )
+        status = "success" if result["exit_code"] == 0 else "failed"
+        run_repo.complete(
+            run_id,
+            status=status,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
+            exit_code=result["exit_code"],
+        )
+    except Exception as e:
+        run_repo.complete(
+            run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
+        )
 
 
 @router.post("/api/tasks/{task_id}/run", response_model=RunResponse)
