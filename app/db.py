@@ -1,46 +1,63 @@
-import sqlite3
+"""Database engine and session management (SQLAlchemy)."""
+
 from pathlib import Path
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS tasks (
-    id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    prompt          TEXT NOT NULL,
-    cron_expression TEXT,
-    allowed_tools   TEXT,
-    enabled         INTEGER NOT NULL DEFAULT 1,
-    created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
-);
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
 
-CREATE TABLE IF NOT EXISTS runs (
-    id           TEXT PRIMARY KEY,
-    task_id      TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    trigger      TEXT NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'running',
-    started_at   TEXT NOT NULL,
-    finished_at  TEXT,
-    duration_ms  INTEGER,
-    stdout       TEXT,
-    stderr       TEXT,
-    exit_code    INTEGER
-);
-"""
+from app.models.database import Base
+
+_engine = None
+_SessionLocal: sessionmaker | None = None
 
 
-def init_db(db_path: Path, check_same_thread: bool = True) -> sqlite3.Connection:
+def _set_sqlite_pragmas(engine) -> None:
+    """Enable WAL mode and foreign keys for every new SQLite connection."""
+
+    @event.listens_for(engine, "connect")
+    def _on_connect(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
+def init_db(db_path: Path) -> None:
+    """Create engine, apply pragmas, create tables, configure session factory."""
+    global _engine, _SessionLocal
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), check_same_thread=check_same_thread)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(SCHEMA)
-    # Migrations
-    _migrate(conn)
-    return conn
+    _engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+    )
+    _set_sqlite_pragmas(_engine)
+    Base.metadata.create_all(_engine)
+    _SessionLocal = sessionmaker(bind=_engine)
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
-    if "activity" not in columns:
-        conn.execute("ALTER TABLE runs ADD COLUMN activity TEXT")
+def get_db():
+    """FastAPI dependency — yields a session, closes on cleanup."""
+    session = _SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def get_session() -> Session:
+    """Create a standalone session (CLI, background workers)."""
+    return _SessionLocal()
+
+
+def get_session_factory() -> sessionmaker:
+    """Return the session factory (for background thread spawning)."""
+    return _SessionLocal
+
+
+def dispose() -> None:
+    """Dispose engine (for clean test teardown)."""
+    global _engine, _SessionLocal
+    if _engine:
+        _engine.dispose()
+        _engine = None
+        _SessionLocal = None
