@@ -58,6 +58,19 @@ class TestTaskCrud:
         assert found is not None
         assert found.name == "Webhook Task"
 
+    def test_create_default_model(self, db_session):
+        task = task_crud.create(db_session, name="Default Model", prompt="p")
+        assert task.model == "sonnet"
+
+    def test_create_with_model(self, db_session):
+        task = task_crud.create(db_session, name="Opus Task", prompt="p", model="opus")
+        assert task.model == "opus"
+
+    def test_update_model(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        updated = task_crud.update(db_session, task.id, model="haiku")
+        assert updated.model == "haiku"
+
 
 class TestRunCrud:
     def _make_task(self, db_session):

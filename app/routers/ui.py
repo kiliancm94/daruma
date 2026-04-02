@@ -55,6 +55,7 @@ def task_create_form(
     prompt: str = Form(...),
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
+    model: str = Form("sonnet"),
     enabled: str = Form(""),
     task_service: TaskService = Depends(get_task_service),
 ):
@@ -63,6 +64,7 @@ def task_create_form(
         prompt=prompt,
         cron_expression=cron_expression or None,
         allowed_tools=allowed_tools or None,
+        model=model,
         enabled=bool(enabled),
     )
     return RedirectResponse("/ui/", status_code=303)
@@ -105,6 +107,7 @@ def task_update_form(
     prompt: str = Form(...),
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
+    model: str = Form("sonnet"),
     enabled: str = Form(""),
     task_service: TaskService = Depends(get_task_service),
 ):
@@ -115,6 +118,7 @@ def task_update_form(
             prompt=prompt,
             cron_expression=cron_expression or None,
             allowed_tools=allowed_tools or None,
+            model=model,
             enabled=bool(enabled),
         )
     except TaskNotFoundError:

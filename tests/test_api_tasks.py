@@ -25,6 +25,23 @@ def test_create_task(client):
     data = resp.json()
     assert data["name"] == "Test"
     assert data["id"]
+    assert data["model"] == "sonnet"
+
+
+def test_create_task_with_model(client):
+    resp = client.post(
+        "/api/tasks", json={"name": "Opus", "prompt": "Do it", "model": "opus"}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["model"] == "opus"
+
+
+def test_update_task_model(client):
+    create = client.post("/api/tasks", json={"name": "M", "prompt": "p"})
+    task_id = create.json()["id"]
+    resp = client.put(f"/api/tasks/{task_id}", json={"model": "haiku"})
+    assert resp.status_code == 200
+    assert resp.json()["model"] == "haiku"
 
 
 def test_list_tasks(client):

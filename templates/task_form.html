@@ -24,6 +24,14 @@
                placeholder="bash,read">
     </div>
     <div class="form-group">
+        <label for="model">Model</label>
+        <select id="model" name="model">
+            {% for m in ["sonnet", "opus", "haiku"] %}
+                <option value="{{ m }}" {{ 'selected' if (task and task.model == m) or (not task and m == 'sonnet') }}>{{ m }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
         <label>
             <input type="checkbox" name="enabled" value="1" {{ 'checked' if not task or task.enabled }}>
             Enabled

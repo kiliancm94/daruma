@@ -38,6 +38,7 @@ class TaskService:
         prompt: str,
         cron_expression: str | None = None,
         allowed_tools: str | None = None,
+        model: str = "sonnet",
         enabled: bool = True,
     ) -> Task:
         return task_crud.create(
@@ -46,6 +47,7 @@ class TaskService:
             prompt=prompt,
             cron_expression=cron_expression,
             allowed_tools=allowed_tools,
+            model=model,
             enabled=enabled,
         )
 
@@ -119,6 +121,7 @@ def execute_task(
         result = runner(
             task.prompt,
             allowed_tools=task.allowed_tools,
+            model=task.model,
             run_id=run_id,
             on_output=_combined,
         )
@@ -156,7 +159,14 @@ def execute_task_background(
 
     threading.Thread(
         target=_background_worker,
-        args=(task.prompt, task.allowed_tools, run.id, runner, session_factory),
+        args=(
+            task.prompt,
+            task.allowed_tools,
+            task.model,
+            run.id,
+            runner,
+            session_factory,
+        ),
         daemon=True,
     ).start()
     return run
@@ -165,6 +175,7 @@ def execute_task_background(
 def _background_worker(
     prompt: str,
     allowed_tools: str | None,
+    model: str,
     run_id: str,
     runner: Callable,
     session_factory: sessionmaker,
@@ -174,6 +185,7 @@ def _background_worker(
         result = runner(
             prompt,
             allowed_tools=allowed_tools,
+            model=model,
             run_id=run_id,
             on_output=lambda stdout, activity: run_crud.update_output(
                 session, run_id, stdout, activity

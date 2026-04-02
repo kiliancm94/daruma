@@ -24,6 +24,9 @@ class Task(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     cron_expression: Mapped[str | None] = mapped_column(String, nullable=True)
     allowed_tools: Mapped[str | None] = mapped_column(String, nullable=True)
+    model: Mapped[str] = mapped_column(
+        String, nullable=False, default="sonnet", server_default="sonnet"
+    )
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[str] = mapped_column(String, nullable=False, default=utcnow)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, default=utcnow)

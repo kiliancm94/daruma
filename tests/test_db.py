@@ -17,6 +17,7 @@ def test_tasks_table_has_expected_columns(engine):
         "prompt",
         "cron_expression",
         "allowed_tools",
+        "model",
         "enabled",
         "created_at",
         "updated_at",

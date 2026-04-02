@@ -4,6 +4,9 @@ import threading
 import time
 from typing import Callable
 
+VALID_MODELS = ("sonnet", "opus", "haiku")
+DEFAULT_MODEL = "sonnet"
+
 VALID_TOOLS = frozenset(
     {
         "Agent",
@@ -51,6 +54,7 @@ def validate_tools(tools_str: str) -> str:
 def run_claude(
     prompt: str,
     allowed_tools: str | None = None,
+    model: str = DEFAULT_MODEL,
     timeout: int = 300,
     run_id: str | None = None,
     on_output: Callable[[str], None] | None = None,
@@ -63,6 +67,8 @@ def run_claude(
         "--output-format",
         "stream-json",
         "--verbose",
+        "--model",
+        model,
         prompt,
     ]
     if allowed_tools:

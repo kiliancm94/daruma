@@ -58,6 +58,44 @@ class TestTaskCommands:
         assert result.exit_code == 0
         assert "Created task: Cron Task" in result.output
 
+    def test_create_with_model(self, runner, mock_db):
+        result = runner.invoke(
+            cli,
+            [
+                "tasks",
+                "create",
+                "--name",
+                "Opus Task",
+                "--prompt",
+                "p",
+                "--model",
+                "opus",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Created task: Opus Task" in result.output
+        result = runner.invoke(cli, ["tasks", "show", "Opus Task"])
+        assert "Model:   opus" in result.output
+
+    def test_create_invalid_model(self, runner, mock_db):
+        result = runner.invoke(
+            cli,
+            ["tasks", "create", "--name", "Bad", "--prompt", "p", "--model", "gpt-4"],
+        )
+        assert result.exit_code != 0
+
+    def test_create_default_model(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "Default", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "show", "Default"])
+        assert "Model:   sonnet" in result.output
+
+    def test_edit_model(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "Editable", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "edit", "Editable", "--model", "haiku"])
+        assert result.exit_code == 0
+        result = runner.invoke(cli, ["tasks", "show", "Editable"])
+        assert "Model:   haiku" in result.output
+
     def test_show(self, runner, mock_db):
         runner.invoke(cli, ["tasks", "create", "--name", "Show Me", "--prompt", "p"])
         result = runner.invoke(cli, ["tasks", "show", "Show Me"])

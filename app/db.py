@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.base import Base
@@ -24,6 +24,17 @@ def _set_sqlite_pragmas(engine) -> None:
         cursor.close()
 
 
+def _migrate(engine) -> None:
+    """Add columns introduced after initial schema (idempotent)."""
+    insp = inspect(engine)
+    task_cols = {col["name"] for col in insp.get_columns("tasks")}
+    if "model" not in task_cols:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE tasks ADD COLUMN model VARCHAR NOT NULL DEFAULT 'sonnet'")
+            )
+
+
 def init_db(db_path: Path) -> None:
     """Create engine, apply pragmas, create tables, configure session factory."""
     global _engine, _SessionLocal
@@ -34,6 +45,7 @@ def init_db(db_path: Path) -> None:
     )
     _set_sqlite_pragmas(_engine)
     Base.metadata.create_all(_engine)
+    _migrate(_engine)
     _SessionLocal = sessionmaker(bind=_engine)
 
 

@@ -7,6 +7,7 @@ services:
       - daruma-data:/data
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DARUMA_DATA_DIR=/data
     restart: unless-stopped
 
 volumes:
