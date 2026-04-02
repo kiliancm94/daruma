@@ -1,3 +1,5 @@
+import io
+import json
 import subprocess
 
 import pytest
@@ -5,10 +7,27 @@ from unittest.mock import patch, MagicMock
 from app.runner import run_claude, validate_tools
 
 
+def _make_stream_lines(text="response", is_error=False):
+    """Build stream-json lines that claude CLI would emit."""
+    lines = []
+    # assistant event with accumulated text
+    lines.append(json.dumps({
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": text}]},
+    }))
+    # result event
+    lines.append(json.dumps({
+        "type": "result",
+        "subtype": "error" if is_error else "success",
+        "result": text,
+    }))
+    return "\n".join(lines) + "\n"
+
+
 def _make_popen_mock(returncode=0, stdout="response", stderr=""):
     proc = MagicMock()
-    proc.communicate.return_value = (stdout, stderr)
-    proc.stdout = iter(stdout.splitlines(keepends=True)) if stdout else iter([])
+    stream_output = _make_stream_lines(stdout)
+    proc.stdout = io.StringIO(stream_output)
     proc.stderr = MagicMock()
     proc.stderr.read.return_value = stderr
     proc.returncode = returncode
@@ -29,6 +48,7 @@ def test_run_claude_success(mock_popen):
     cmd = mock_popen.call_args[0][0]
     assert cmd[0] == "claude"
     assert "-p" in cmd
+    assert "--output-format" in cmd
 
 
 @patch("app.runner.subprocess.Popen")
@@ -53,13 +73,23 @@ def test_run_claude_failure(mock_popen):
 
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_timeout(mock_popen):
-    proc = _make_popen_mock()
-    proc.communicate.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=300)
+    proc = MagicMock()
+    # Yield lines slowly — deadline of 0 will be exceeded on first line
+    def slow_iter():
+        yield '{"type":"system","subtype":"init"}\n'
+        yield '{"type":"system","subtype":"init"}\n'
+    proc.stdout = slow_iter()
+    proc.stderr = MagicMock()
+    proc.stderr.read.return_value = ""
+    proc.returncode = -1
+    proc.kill = MagicMock()
+    proc.wait = MagicMock()
     mock_popen.return_value = proc
-    result = run_claude("Slow task")
+
+    result = run_claude("Slow task", timeout=0)
     assert result["exit_code"] == -1
     assert "timeout" in result["stderr"].lower()
-    proc.kill.assert_called_once()
+    proc.kill.assert_called()
 
 
 @patch("app.runner.subprocess.Popen")
@@ -73,12 +103,12 @@ def test_run_claude_tracks_process(mock_popen):
 @patch("app.runner._FLUSH_INTERVAL", 0)
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_streams_output(mock_popen):
-    mock_popen.return_value = _make_popen_mock(stdout="line1\nline2\nline3\n")
+    mock_popen.return_value = _make_popen_mock(stdout="streaming result")
     captured = []
     result = run_claude("Stream me", on_output=lambda s: captured.append(s))
-    assert result["stdout"] == "line1\nline2\nline3\n"
+    assert result["stdout"] == "streaming result"
     assert len(captured) > 0
-    assert captured[-1] == "line1\nline2\nline3\n"
+    assert captured[-1] == "streaming result"
 
 
 # --- Tool validation tests ---
