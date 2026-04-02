@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy.orm import Session
 
-from app.models import TaskCreate, TaskUpdate, TaskResponse
+from app.crud import TaskRepo
+from app.db import get_db
+from app.models.schemas import TaskCreate, TaskUpdate, TaskResponse
 from app.services import TaskService, TaskNotFoundError
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
-def get_task_service() -> TaskService:
-    raise RuntimeError("task_service dependency not configured")
+def get_task_service(session: Session = Depends(get_db)) -> TaskService:
+    return TaskService(TaskRepo(session))
 
 
 @router.get("", response_model=list[TaskResponse])

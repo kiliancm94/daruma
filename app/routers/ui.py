@@ -5,7 +5,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
+from app.crud import TaskRepo, RunRepo
+from app.db import get_db
+from app.models.schemas import TaskResponse, RunResponse
 from app.services import TaskService, RunService, TaskNotFoundError, RunNotFoundError
 
 router = APIRouter(prefix="/ui", tags=["ui"])
@@ -14,12 +18,12 @@ templates = Jinja2Templates(
 )
 
 
-def get_task_service() -> TaskService:
-    raise RuntimeError("not configured")
+def get_task_service(session: Session = Depends(get_db)) -> TaskService:
+    return TaskService(TaskRepo(session))
 
 
-def get_run_service() -> RunService:
-    raise RuntimeError("not configured")
+def get_run_service(session: Session = Depends(get_db)) -> RunService:
+    return RunService(RunRepo(session))
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -29,9 +33,13 @@ def tasks_list(
     run_service: RunService = Depends(get_run_service),
 ):
     tasks = task_service.list()
+    task_data = []
     for task in tasks:
-        task["last_run"] = run_service.last_run(task["id"])
-    return templates.TemplateResponse(request, "tasks_list.html", {"tasks": tasks})
+        d = TaskResponse.model_validate(task).model_dump()
+        last_run = run_service.last_run(task.id)
+        d["last_run"] = RunResponse.model_validate(last_run).model_dump() if last_run else None
+        task_data.append(d)
+    return templates.TemplateResponse(request, "tasks_list.html", {"tasks": task_data})
 
 
 @router.get("/tasks/new", response_class=HTMLResponse)

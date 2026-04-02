@@ -3,7 +3,10 @@
 import threading
 from typing import Callable
 
-from app.repository import TaskRepo, RunRepo
+from sqlalchemy.orm import sessionmaker
+
+from app.crud import TaskRepo, RunRepo
+from app.models.database import Task, Run
 from app.runner import run_claude, cancel_run
 
 
@@ -23,7 +26,7 @@ class TaskService:
     def __init__(self, repo: TaskRepo):
         self.repo = repo
 
-    def list(self) -> list[dict]:
+    def list(self) -> list[Task]:
         return self.repo.list()
 
     def create(
@@ -33,7 +36,7 @@ class TaskService:
         cron_expression: str | None = None,
         allowed_tools: str | None = None,
         enabled: bool = True,
-    ) -> dict:
+    ) -> Task:
         return self.repo.create(
             name=name,
             prompt=prompt,
@@ -42,19 +45,19 @@ class TaskService:
             enabled=enabled,
         )
 
-    def get(self, task_id: str) -> dict:
+    def get(self, task_id: str) -> Task:
         task = self.repo.get(task_id)
         if not task:
             raise TaskNotFoundError(task_id)
         return task
 
-    def get_by_name(self, name: str) -> dict:
+    def get_by_name(self, name: str) -> Task:
         task = self.repo.get_by_name(name)
         if not task:
             raise TaskNotFoundError(name)
         return task
 
-    def update(self, task_id: str, **fields) -> dict:
+    def update(self, task_id: str, **fields) -> Task:
         task = self.repo.get(task_id)
         if not task:
             raise TaskNotFoundError(task_id)
@@ -69,31 +72,31 @@ class RunService:
     def __init__(self, repo: RunRepo):
         self.repo = repo
 
-    def list(self, task_id: str | None = None) -> list[dict]:
+    def list(self, task_id: str | None = None) -> list[Run]:
         return self.repo.list(task_id=task_id)
 
-    def get(self, run_id: str) -> dict:
+    def get(self, run_id: str) -> Run:
         run = self.repo.get(run_id)
         if not run:
             raise RunNotFoundError(run_id)
         return run
 
-    def last_run(self, task_id: str) -> dict | None:
+    def last_run(self, task_id: str) -> Run | None:
         return self.repo.last_run(task_id)
 
 
 def execute_task(
-    task: dict,
+    task: Task,
     run_repo: RunRepo,
     trigger: str = "manual",
     runner: Callable | None = None,
     on_output: Callable[[str, str], None] | None = None,
-) -> dict:
-    """Execute a task synchronously. Returns the completed run dict."""
+) -> Run:
+    """Execute a task synchronously. Returns the completed Run."""
     if runner is None:
         runner = run_claude
-    run = run_repo.create(task_id=task["id"], trigger=trigger)
-    run_id = run["id"]
+    run = run_repo.create(task_id=task.id, trigger=trigger)
+    run_id = run.id
 
     if on_output:
         def _combined(stdout: str, activity: str) -> None:
@@ -105,8 +108,8 @@ def execute_task(
 
     try:
         result = runner(
-            task["prompt"],
-            allowed_tools=task.get("allowed_tools"),
+            task.prompt,
+            allowed_tools=task.allowed_tools,
             run_id=run_id,
             on_output=_combined,
         )
@@ -126,28 +129,43 @@ def execute_task(
 
 
 def execute_task_background(
-    task: dict,
-    run_repo: RunRepo,
+    task: Task,
+    session_factory: sessionmaker,
     trigger: str = "manual",
     runner: Callable | None = None,
-) -> dict:
-    """Execute a task in a background thread. Returns the initial run dict (status=running)."""
+) -> Run:
+    """Execute a task in a background thread. Returns the initial Run (status=running)."""
     if runner is None:
         runner = run_claude
-    run = run_repo.create(task_id=task["id"], trigger=trigger)
+    session = session_factory()
+    try:
+        run_repo = RunRepo(session)
+        run = run_repo.create(task_id=task.id, trigger=trigger)
+        session.expunge(run)
+    finally:
+        session.close()
+
     threading.Thread(
         target=_background_worker,
-        args=(task, run["id"], runner, run_repo),
+        args=(task.prompt, task.allowed_tools, run.id, runner, session_factory),
         daemon=True,
     ).start()
     return run
 
 
-def _background_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> None:
+def _background_worker(
+    prompt: str,
+    allowed_tools: str | None,
+    run_id: str,
+    runner: Callable,
+    session_factory: sessionmaker,
+) -> None:
+    session = session_factory()
+    run_repo = RunRepo(session)
     try:
         result = runner(
-            task["prompt"],
-            allowed_tools=task.get("allowed_tools"),
+            prompt,
+            allowed_tools=allowed_tools,
             run_id=run_id,
             on_output=lambda stdout, activity: run_repo.update_output(
                 run_id, stdout, activity
@@ -166,6 +184,8 @@ def _background_worker(task: dict, run_id: str, runner: Callable, run_repo: RunR
         run_repo.complete(
             run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
         )
+    finally:
+        session.close()
 
 
 def cancel_task_run(run_id: str, run_repo: RunRepo) -> None:
@@ -173,7 +193,7 @@ def cancel_task_run(run_id: str, run_repo: RunRepo) -> None:
     run = run_repo.get(run_id)
     if not run:
         raise RunNotFoundError(run_id)
-    if run["status"] != "running":
+    if run.status != "running":
         raise ValueError("Run is not active")
     killed = cancel_run(run_id)
     if not killed:

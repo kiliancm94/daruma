@@ -3,10 +3,13 @@
 import sys
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from app.config import DB_PATH
-from app.db import init_db
-from app.repository import TaskRepo, RunRepo
+from app.crud import TaskRepo, RunRepo
+from app.db import init_db, get_session
+from app.models.schemas import TaskResponse, RunResponse
 from app.services import (
     TaskService,
     RunService,
@@ -15,9 +18,12 @@ from app.services import (
     execute_task,
 )
 
+console = Console()
+
 
 def _connect():
-    return init_db(DB_PATH)
+    init_db(DB_PATH)
+    return get_session()
 
 
 @click.group()
@@ -34,22 +40,30 @@ def tasks():
 
 
 @tasks.command("list")
-def list_tasks():
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def list_tasks(as_json):
     """List all tasks."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
     items = task_service.list()
-    conn.close()
+    session.close()
     if not items:
         click.echo("No tasks found.")
         return
-    # Header
-    click.echo(f"  {'ID':<10} {'Name':<30} {'Schedule':<20} {'Status'}")
-    click.echo(f"  {'─' * 10} {'─' * 30} {'─' * 20} {'─' * 10}")
+    if as_json:
+        data = [TaskResponse.model_validate(t).model_dump() for t in items]
+        console.print_json(data=data)
+        return
+    table = Table(show_edge=False, pad_edge=False)
+    table.add_column("ID", style="dim", max_width=8)
+    table.add_column("Name")
+    table.add_column("Schedule", style="dim")
+    table.add_column("Status")
     for t in items:
-        status = "enabled" if t["enabled"] else "disabled"
-        cron = t["cron_expression"] or "manual only"
-        click.echo(f"  {t['id'][:8]:<10} {t['name']:<30} {cron:<20} [{status}]")
+        status = "[green]enabled[/green]" if t.enabled else "[red]disabled[/red]"
+        cron = t.cron_expression or "manual only"
+        table.add_row(t.id[:8], t.name, cron, status)
+    console.print(table)
 
 
 @tasks.command("create")
@@ -60,8 +74,8 @@ def list_tasks():
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
 def create_task(name, prompt, cron, tools, disabled):
     """Create a new task."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
     task = task_service.create(
         name=name,
         prompt=prompt,
@@ -69,26 +83,30 @@ def create_task(name, prompt, cron, tools, disabled):
         allowed_tools=tools,
         enabled=not disabled,
     )
-    conn.close()
-    click.echo(f"Created task: {task['name']} ({task['id'][:8]})")
+    session.close()
+    click.echo(f"Created task: {task.name} ({task.id[:8]})")
 
 
 @tasks.command("show")
 @click.argument("task_id")
-def show_task(task_id):
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def show_task(task_id, as_json):
     """Show task details. Accepts full ID, partial ID, or name."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
     task = _resolve_task(task_service, task_id)
-    conn.close()
-    click.echo(f"ID:      {task['id']}")
-    click.echo(f"Name:    {task['name']}")
-    click.echo(f"Prompt:  {task['prompt']}")
-    click.echo(f"Cron:    {task['cron_expression'] or 'none'}")
-    click.echo(f"Tools:   {task['allowed_tools'] or 'all'}")
-    click.echo(f"Enabled: {bool(task['enabled'])}")
-    click.echo(f"Created: {task['created_at']}")
-    click.echo(f"Updated: {task['updated_at']}")
+    session.close()
+    if as_json:
+        console.print_json(data=TaskResponse.model_validate(task).model_dump())
+        return
+    click.echo(f"ID:      {task.id}")
+    click.echo(f"Name:    {task.name}")
+    click.echo(f"Prompt:  {task.prompt}")
+    click.echo(f"Cron:    {task.cron_expression or 'none'}")
+    click.echo(f"Tools:   {task.allowed_tools or 'all'}")
+    click.echo(f"Enabled: {task.enabled}")
+    click.echo(f"Created: {task.created_at}")
+    click.echo(f"Updated: {task.updated_at}")
 
 
 @tasks.command("edit")
@@ -100,8 +118,8 @@ def show_task(task_id):
 @click.option("--enable/--disable", default=None)
 def edit_task(task_id, name, prompt, cron, tools, enable):
     """Update a task."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
     task = _resolve_task(task_service, task_id)
     fields = {}
     if name is not None:
@@ -117,9 +135,9 @@ def edit_task(task_id, name, prompt, cron, tools, enable):
     if not fields:
         click.echo("Nothing to update.")
         return
-    updated = task_service.update(task["id"], **fields)
-    conn.close()
-    click.echo(f"Updated task: {updated['name']} ({updated['id'][:8]})")
+    updated = task_service.update(task.id, **fields)
+    session.close()
+    click.echo(f"Updated task: {updated.name} ({updated.id[:8]})")
 
 
 @tasks.command("delete")
@@ -127,14 +145,14 @@ def edit_task(task_id, name, prompt, cron, tools, enable):
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 def delete_task(task_id, yes):
     """Delete a task."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
     task = _resolve_task(task_service, task_id)
     if not yes:
-        click.confirm(f"Delete task '{task['name']}'?", abort=True)
-    task_service.delete(task["id"])
-    conn.close()
-    click.echo(f"Deleted task: {task['name']}")
+        click.confirm(f"Delete task '{task.name}'?", abort=True)
+    task_service.delete(task.id)
+    session.close()
+    click.echo(f"Deleted task: {task.name}")
 
 
 # ── Runs ───────────────────────────────────────────────
@@ -148,55 +166,76 @@ def runs():
 @runs.command("list")
 @click.option("--task", "task_id", default=None, help="Filter by task ID or name")
 @click.option("--limit", default=20, help="Max runs to show")
-def list_runs(task_id, limit):
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def list_runs(task_id, limit, as_json):
     """List recent runs."""
-    conn = _connect()
-    run_service = RunService(RunRepo(conn))
+    session = _connect()
+    run_service = RunService(RunRepo(session))
 
     resolved_task_id = None
     if task_id:
-        task_service = TaskService(TaskRepo(conn))
+        task_service = TaskService(TaskRepo(session))
         task = _resolve_task(task_service, task_id)
-        resolved_task_id = task["id"]
+        resolved_task_id = task.id
 
     items = run_service.list(task_id=resolved_task_id)[:limit]
-    conn.close()
+    session.close()
     if not items:
         click.echo("No runs found.")
         return
-    click.echo(f"  {'ID':<10} {'Status':<10} {'Trigger':<10} {'Duration':<12} {'Started'}")
-    click.echo(f"  {'─' * 10} {'─' * 10} {'─' * 10} {'─' * 12} {'─' * 20}")
+    if as_json:
+        data = [RunResponse.model_validate(r).model_dump() for r in items]
+        console.print_json(data=data)
+        return
+    table = Table(show_edge=False, pad_edge=False)
+    table.add_column("ID", style="dim", max_width=8)
+    table.add_column("Status")
+    table.add_column("Trigger", style="dim")
+    table.add_column("Duration", style="dim")
+    table.add_column("Started")
     for r in items:
-        duration = f"{r['duration_ms']}ms" if r["duration_ms"] else "…"
-        click.echo(
-            f"  {r['id'][:8]:<10} {r['status']:<10} {r['trigger']:<10} {duration:<12} {r['started_at']}"
+        duration = f"{r.duration_ms}ms" if r.duration_ms else "..."
+        status_style = {"success": "green", "failed": "red", "running": "yellow"}.get(
+            r.status, ""
         )
+        table.add_row(
+            r.id[:8],
+            f"[{status_style}]{r.status}[/{status_style}]" if status_style else r.status,
+            r.trigger,
+            duration,
+            r.started_at,
+        )
+    console.print(table)
 
 
 @runs.command("show")
 @click.argument("run_id")
-def show_run(run_id):
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def show_run(run_id, as_json):
     """Show run details and output."""
-    conn = _connect()
-    run_service = RunService(RunRepo(conn))
+    session = _connect()
+    run_service = RunService(RunRepo(session))
     try:
         run = run_service.get(run_id)
     except RunNotFoundError:
         click.echo(f"Run not found: {run_id}", err=True)
         raise SystemExit(1)
-    conn.close()
-    click.echo(f"ID:       {run['id']}")
-    click.echo(f"Task:     {run['task_id']}")
-    click.echo(f"Trigger:  {run['trigger']}")
-    click.echo(f"Status:   {run['status']}")
-    click.echo(f"Started:  {run['started_at']}")
-    click.echo(f"Finished: {run['finished_at'] or '…'}")
-    click.echo(f"Duration: {run['duration_ms'] or '…'}ms")
-    click.echo(f"Exit:     {run['exit_code']}")
-    if run.get("stdout"):
-        click.echo(f"\n--- stdout ---\n{run['stdout']}")
-    if run.get("stderr"):
-        click.echo(f"\n--- stderr ---\n{run['stderr']}")
+    session.close()
+    if as_json:
+        console.print_json(data=RunResponse.model_validate(run).model_dump())
+        return
+    click.echo(f"ID:       {run.id}")
+    click.echo(f"Task:     {run.task_id}")
+    click.echo(f"Trigger:  {run.trigger}")
+    click.echo(f"Status:   {run.status}")
+    click.echo(f"Started:  {run.started_at}")
+    click.echo(f"Finished: {run.finished_at or '...'}")
+    click.echo(f"Duration: {run.duration_ms or '...'}ms")
+    click.echo(f"Exit:     {run.exit_code}")
+    if run.stdout:
+        click.echo(f"\n--- stdout ---\n{run.stdout}")
+    if run.stderr:
+        click.echo(f"\n--- stderr ---\n{run.stderr}")
 
 
 # ── Run (execute) ─────────────────────────────────────
@@ -206,17 +245,16 @@ def show_run(run_id):
 @click.argument("task_name_or_id")
 def run_task(task_name_or_id):
     """Run a task now (blocks until complete, streams output)."""
-    conn = _connect()
-    task_service = TaskService(TaskRepo(conn))
-    run_repo = RunRepo(conn)
+    session = _connect()
+    task_service = TaskService(TaskRepo(session))
+    run_repo = RunRepo(session)
 
     task = _resolve_task(task_service, task_name_or_id)
-    click.echo(f"Running task: {task['name']}…\n")
+    click.echo(f"Running task: {task.name}...\n")
 
     last_output = [""]
 
     def _on_output(stdout: str, activity: str) -> None:
-        # Print new content since last callback
         if stdout and stdout != last_output[0]:
             new = stdout[len(last_output[0]):]
             if new:
@@ -226,41 +264,38 @@ def run_task(task_name_or_id):
     result = execute_task(
         task, run_repo, trigger="manual", on_output=_on_output,
     )
-    conn.close()
+    session.close()
     click.echo()
     click.echo(
-        f"\nStatus: {result['status']}  "
-        f"Exit: {result['exit_code']}  "
-        f"Duration: {result['duration_ms']}ms"
+        f"\nStatus: {result.status}  "
+        f"Exit: {result.exit_code}  "
+        f"Duration: {result.duration_ms}ms"
     )
-    if result["status"] != "success":
+    if result.status != "success":
         sys.exit(1)
 
 
 # ── Helpers ────────────────────────────────────────────
 
 
-def _resolve_task(task_service: TaskService, identifier: str) -> dict:
+def _resolve_task(task_service: TaskService, identifier: str):
     """Resolve a task by full ID, partial ID (prefix), or name."""
-    # Try exact ID
     try:
         return task_service.get(identifier)
     except TaskNotFoundError:
         pass
-    # Try by name
     try:
         return task_service.get_by_name(identifier)
     except TaskNotFoundError:
         pass
-    # Try prefix match
     all_tasks = task_service.list()
-    matches = [t for t in all_tasks if t["id"].startswith(identifier)]
+    matches = [t for t in all_tasks if t.id.startswith(identifier)]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
         click.echo(f"Ambiguous ID prefix '{identifier}', matches:", err=True)
         for t in matches:
-            click.echo(f"  {t['id']}  {t['name']}", err=True)
+            click.echo(f"  {t.id}  {t.name}", err=True)
         raise SystemExit(1)
     click.echo(f"Task not found: {identifier}", err=True)
     raise SystemExit(1)

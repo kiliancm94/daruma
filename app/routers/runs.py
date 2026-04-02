@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from app.models import RunResponse
+from app.crud import RunRepo
+from app.db import get_db
+from app.models.schemas import RunResponse
 from app.services import RunService, RunNotFoundError
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 
-def get_run_service() -> RunService:
-    raise RuntimeError("run_service dependency not configured")
+def get_run_service(session: Session = Depends(get_db)) -> RunService:
+    return RunService(RunRepo(session))
 
 
 @router.get("", response_model=list[RunResponse])
