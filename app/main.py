@@ -30,13 +30,14 @@ def _execute_cron_task(task_id: str) -> None:
         task["prompt"],
         allowed_tools=task.get("allowed_tools"),
         run_id=run["id"],
-        on_output=lambda stdout: run_repo_for_output.update_output(run["id"], stdout),
+        on_output=lambda stdout, activity: run_repo_for_output.update_output(run["id"], stdout, activity),
     )
     status = "success" if result["exit_code"] == 0 else "failed"
     run_repo.complete(
         run["id"], status=status,
         stdout=result["stdout"], stderr=result["stderr"],
         exit_code=result["exit_code"],
+        activity=result.get("activity", ""),
     )
 
 

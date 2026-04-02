@@ -122,14 +122,14 @@ def test_run_claude_tracks_process(mock_popen):
 def test_run_claude_streams_output(mock_popen):
     mock_popen.return_value = _make_popen_mock(stdout="streaming result")
     captured = []
-    result = run_claude("Stream me", on_output=lambda s: captured.append(s))
+    result = run_claude("Stream me", on_output=lambda out, act: captured.append((out, act)))
     assert "streaming result" in result["stdout"]
     assert len(captured) > 0
 
 
 @patch("app.runner._FLUSH_INTERVAL", 0)
 @patch("app.runner.subprocess.Popen")
-def test_run_claude_shows_tool_activity(mock_popen):
+def test_run_claude_separates_output_and_activity(mock_popen):
     proc = MagicMock()
     proc.stdout = io.StringIO(_make_stream_with_tool_use())
     proc.stderr = MagicMock()
@@ -137,12 +137,10 @@ def test_run_claude_shows_tool_activity(mock_popen):
     proc.returncode = 0
     proc.wait = MagicMock()
     mock_popen.return_value = proc
-    captured = []
-    result = run_claude("Do stuff", on_output=lambda s: captured.append(s))
-    output = result["stdout"]
-    assert "[Bash] echo hello" in output
-    assert "hello" in output
-    assert "Done!" in output
+    result = run_claude("Do stuff")
+    assert "Done!" in result["stdout"]
+    assert "[Bash] echo hello" in result["activity"]
+    assert "hello" in result["activity"]
 
 
 # --- Tool validation tests ---

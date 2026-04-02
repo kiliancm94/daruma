@@ -31,7 +31,7 @@ def _execute_task_bg(
             task["prompt"],
             allowed_tools=task.get("allowed_tools"),
             run_id=run_id,
-            on_output=lambda stdout: run_repo.update_output(run_id, stdout),
+            on_output=lambda stdout, activity: run_repo.update_output(run_id, stdout, activity),
         )
         status = "success" if result["exit_code"] == 0 else "failed"
         run_repo.complete(
@@ -40,6 +40,7 @@ def _execute_task_bg(
             stdout=result["stdout"],
             stderr=result["stderr"],
             exit_code=result["exit_code"],
+            activity=result.get("activity", ""),
         )
     except Exception as e:
         run_repo.complete(

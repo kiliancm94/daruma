@@ -39,3 +39,4 @@ class RunResponse(BaseModel):
     stdout: str | None
     stderr: str | None
     exit_code: int | None
+    activity: str | None = None

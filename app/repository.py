@@ -90,15 +90,22 @@ class RunRepo:
         row = self.conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         return _row_to_dict(row)
 
-    def update_output(self, run_id: str, stdout: str) -> None:
-        """Update partial stdout while a run is still in progress."""
+    def update_output(self, run_id: str, stdout: str, activity: str = "") -> None:
+        """Update partial stdout/activity while a run is still in progress."""
         self.conn.execute(
-            "UPDATE runs SET stdout = ? WHERE id = ?", (stdout, run_id)
+            "UPDATE runs SET stdout = ?, activity = ? WHERE id = ?",
+            (stdout, activity, run_id),
         )
         self.conn.commit()
 
     def complete(
-        self, run_id: str, status: str, stdout: str, stderr: str, exit_code: int
+        self,
+        run_id: str,
+        status: str,
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+        activity: str = "",
     ) -> dict | None:
         now = _now()
         run = self.get(run_id)
@@ -110,9 +117,9 @@ class RunRepo:
         self.conn.execute(
             """UPDATE runs
                SET status = ?, finished_at = ?, duration_ms = ?,
-                   stdout = ?, stderr = ?, exit_code = ?
+                   stdout = ?, stderr = ?, exit_code = ?, activity = ?
                WHERE id = ?""",
-            (status, now, duration_ms, stdout, stderr, exit_code, run_id),
+            (status, now, duration_ms, stdout, stderr, exit_code, activity, run_id),
         )
         self.conn.commit()
         return _row_to_dict(self.get(run_id))

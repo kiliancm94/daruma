@@ -65,7 +65,7 @@ def run_claude(
                 _active_processes[run_id] = proc
 
         try:
-            result = _read_stream(proc, timeout, on_output)
+            output, activity = _read_stream(proc, timeout, on_output)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
@@ -73,6 +73,7 @@ def run_claude(
                 "exit_code": -1,
                 "stdout": "",
                 "stderr": f"Timeout after {timeout}s",
+                "activity": "",
             }
         finally:
             if run_id:
@@ -83,25 +84,27 @@ def run_claude(
         stderr = proc.stderr.read() if proc.stderr else ""
         return {
             "exit_code": proc.returncode,
-            "stdout": result,
+            "stdout": output,
             "stderr": stderr,
+            "activity": activity,
         }
     except FileNotFoundError:
         return {
             "exit_code": -1,
             "stdout": "",
             "stderr": "claude CLI not found",
+            "activity": "",
         }
 
 
 def _read_stream(
     proc: subprocess.Popen,
     timeout: int,
-    on_output: Callable[[str], None] | None,
-) -> str:
-    """Parse stream-json output, build activity log, flush periodically."""
-    activity: list[str] = []
-    final_result = ""
+    on_output: Callable[[str, str], None] | None,
+) -> tuple[str, str]:
+    """Parse stream-json output. Returns (output_text, activity_log)."""
+    activity_lines: list[str] = []
+    output_lines: list[str] = []
     last_flush = time.monotonic()
     deadline = time.monotonic() + timeout
 
@@ -128,49 +131,47 @@ def _read_stream(
                 if btype == "tool_use":
                     name = block.get("name", "?")
                     inp = block.get("input", {})
-                    # Show what tool is being called
                     if name == "Bash":
-                        cmd = inp.get("command", "")
-                        activity.append(f"[Bash] {cmd}")
-                    elif name == "Read":
-                        activity.append(f"[Read] {inp.get('file_path', '')}")
-                    elif name == "Write":
-                        activity.append(f"[Write] {inp.get('file_path', '')}")
-                    elif name == "Edit":
-                        activity.append(f"[Edit] {inp.get('file_path', '')}")
+                        activity_lines.append(f"[Bash] {inp.get('command', '')}")
+                    elif name in ("Read", "Write", "Edit"):
+                        activity_lines.append(f"[{name}] {inp.get('file_path', '')}")
                     else:
-                        activity.append(f"[{name}]")
+                        activity_lines.append(f"[{name}]")
                 elif btype == "text":
                     text = block.get("text", "")
                     if text.strip():
-                        activity.append(text)
+                        output_lines.append(text)
 
         elif evt_type == "user":
             for block in content:
                 if block.get("type") == "tool_result":
                     result_text = block.get("content", "")
                     if isinstance(result_text, str) and result_text.strip():
-                        # Truncate long tool outputs for the activity view
                         if len(result_text) > 500:
                             result_text = result_text[:500] + "…"
-                        activity.append(f"  → {result_text}")
+                        activity_lines.append(f"  → {result_text}")
 
         elif evt_type == "result":
-            final_result = event.get("result", "")
+            result_text = event.get("result", "")
+            if result_text and not output_lines:
+                output_lines.append(result_text)
 
-        # Flush partial activity periodically
-        if on_output and activity:
+        # Flush periodically
+        if on_output:
             now = time.monotonic()
             if now - last_flush >= _FLUSH_INTERVAL:
-                on_output("\n".join(activity))
+                on_output(
+                    "\n".join(output_lines),
+                    "\n".join(activity_lines),
+                )
                 last_flush = now
 
-    # Final flush
-    output = "\n".join(activity) if activity else final_result
+    output = "\n".join(output_lines)
+    activity = "\n".join(activity_lines)
     if on_output:
-        on_output(output)
+        on_output(output, activity)
 
-    return output
+    return output, activity
 
 
 def cancel_run(run_id: str) -> bool:

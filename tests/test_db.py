@@ -25,4 +25,5 @@ def test_runs_table_has_expected_columns(db_conn: sqlite3.Connection):
     assert columns == {
         "id", "task_id", "trigger", "status", "started_at",
         "finished_at", "duration_ms", "stdout", "stderr", "exit_code",
+        "activity",
     }

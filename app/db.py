@@ -35,4 +35,12 @@ def init_db(db_path: Path, check_same_thread: bool = True) -> sqlite3.Connection
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    # Migrations
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    if "activity" not in columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN activity TEXT")
