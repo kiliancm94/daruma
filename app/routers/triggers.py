@@ -1,9 +1,11 @@
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import RunResponse
-from app.repository import RunRepo
+from app.db import get_db
+from app.db import get_session_factory as _get_session_factory
+from app.schemas.run import RunResponse
 from app.runner import run_claude
 from app.services import (
     TaskService,
@@ -16,12 +18,12 @@ from app.services import (
 router = APIRouter(tags=["triggers"])
 
 
-def get_task_service() -> TaskService:
-    raise RuntimeError("not configured")
+def get_task_service(session: Session = Depends(get_db)) -> TaskService:
+    return TaskService(session)
 
 
-def get_run_repo() -> RunRepo:
-    raise RuntimeError("not configured")
+def get_session_factory() -> sessionmaker:
+    return _get_session_factory()
 
 
 def get_runner() -> Callable:
@@ -32,37 +34,41 @@ def get_runner() -> Callable:
 def manual_trigger(
     task_id: str,
     task_service: TaskService = Depends(get_task_service),
-    run_repo: RunRepo = Depends(get_run_repo),
+    session_factory: sessionmaker = Depends(get_session_factory),
     runner: Callable = Depends(get_runner),
 ):
     try:
         task = task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_background(task, run_repo, trigger="manual", runner=runner)
+    return execute_task_background(
+        task, session_factory, trigger="manual", runner=runner
+    )
 
 
 @router.post("/api/trigger/{task_name}", response_model=RunResponse)
 def webhook_trigger(
     task_name: str,
     task_service: TaskService = Depends(get_task_service),
-    run_repo: RunRepo = Depends(get_run_repo),
+    session_factory: sessionmaker = Depends(get_session_factory),
     runner: Callable = Depends(get_runner),
 ):
     try:
         task = task_service.get_by_name(task_name)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_background(task, run_repo, trigger="webhook", runner=runner)
+    return execute_task_background(
+        task, session_factory, trigger="webhook", runner=runner
+    )
 
 
 @router.post("/api/runs/{run_id}/cancel")
 def cancel_run_endpoint(
     run_id: str,
-    run_repo: RunRepo = Depends(get_run_repo),
+    session: Session = Depends(get_db),
 ):
     try:
-        cancel_task_run(run_id, run_repo)
+        cancel_task_run(run_id, session)
     except RunNotFoundError:
         raise HTTPException(404, "Run not found")
     except ValueError as e:

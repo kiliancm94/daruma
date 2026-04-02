@@ -3,7 +3,13 @@
 import threading
 from typing import Callable
 
-from app.repository import TaskRepo, RunRepo
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.crud import tasks as task_crud
+from app.crud import runs as run_crud
+from app.crud.exceptions import NotFoundError
+from app.models.task import Task
+from app.models.run import Run
 from app.runner import run_claude, cancel_run
 
 
@@ -20,11 +26,11 @@ class RunNotFoundError(Exception):
 
 
 class TaskService:
-    def __init__(self, repo: TaskRepo):
-        self.repo = repo
+    def __init__(self, session: Session):
+        self.session = session
 
-    def list(self) -> list[dict]:
-        return self.repo.list()
+    def list(self) -> list[Task]:
+        return task_crud.get_all(self.session)
 
     def create(
         self,
@@ -33,8 +39,9 @@ class TaskService:
         cron_expression: str | None = None,
         allowed_tools: str | None = None,
         enabled: bool = True,
-    ) -> dict:
-        return self.repo.create(
+    ) -> Task:
+        return task_crud.create(
+            self.session,
             name=name,
             prompt=prompt,
             cron_expression=cron_expression,
@@ -42,76 +49,82 @@ class TaskService:
             enabled=enabled,
         )
 
-    def get(self, task_id: str) -> dict:
-        task = self.repo.get(task_id)
+    def get(self, task_id: str) -> Task:
+        task = task_crud.get(self.session, task_id)
         if not task:
             raise TaskNotFoundError(task_id)
         return task
 
-    def get_by_name(self, name: str) -> dict:
-        task = self.repo.get_by_name(name)
+    def get_by_name(self, name: str) -> Task:
+        task = task_crud.get_by_name(self.session, name)
         if not task:
             raise TaskNotFoundError(name)
         return task
 
-    def update(self, task_id: str, **fields) -> dict:
-        task = self.repo.get(task_id)
-        if not task:
+    def update(self, task_id: str, **fields) -> Task:
+        try:
+            return task_crud.update(self.session, task_id, **fields)
+        except NotFoundError:
             raise TaskNotFoundError(task_id)
-        return self.repo.update(task_id, **fields)
 
     def delete(self, task_id: str) -> None:
-        if not self.repo.delete(task_id):
+        try:
+            task_crud.delete(self.session, task_id)
+        except NotFoundError:
             raise TaskNotFoundError(task_id)
 
 
 class RunService:
-    def __init__(self, repo: RunRepo):
-        self.repo = repo
+    def __init__(self, session: Session):
+        self.session = session
 
-    def list(self, task_id: str | None = None) -> list[dict]:
-        return self.repo.list(task_id=task_id)
+    def list(self, task_id: str | None = None) -> list[Run]:
+        return run_crud.get_all(self.session, task_id=task_id)
 
-    def get(self, run_id: str) -> dict:
-        run = self.repo.get(run_id)
+    def get(self, run_id: str) -> Run:
+        run = run_crud.get(self.session, run_id)
         if not run:
             raise RunNotFoundError(run_id)
         return run
 
-    def last_run(self, task_id: str) -> dict | None:
-        return self.repo.last_run(task_id)
+    def last_run(self, task_id: str) -> Run | None:
+        return run_crud.get_last(self.session, task_id)
 
 
 def execute_task(
-    task: dict,
-    run_repo: RunRepo,
+    task: Task,
+    session: Session,
     trigger: str = "manual",
     runner: Callable | None = None,
     on_output: Callable[[str, str], None] | None = None,
-) -> dict:
-    """Execute a task synchronously. Returns the completed run dict."""
+) -> Run:
+    """Execute a task synchronously. Returns the completed Run."""
     if runner is None:
         runner = run_claude
-    run = run_repo.create(task_id=task["id"], trigger=trigger)
-    run_id = run["id"]
+    run = run_crud.create(session, task_id=task.id, trigger=trigger)
+    run_id = run.id
 
     if on_output:
+
         def _combined(stdout: str, activity: str) -> None:
-            run_repo.update_output(run_id, stdout, activity)
+            run_crud.update_output(session, run_id, stdout, activity)
             on_output(stdout, activity)
+
     else:
+
         def _combined(stdout: str, activity: str) -> None:
-            run_repo.update_output(run_id, stdout, activity)
+            run_crud.update_output(session, run_id, stdout, activity)
 
     try:
         result = runner(
-            task["prompt"],
-            allowed_tools=task.get("allowed_tools"),
+            task.prompt,
+            allowed_tools=task.allowed_tools,
             run_id=run_id,
             on_output=_combined,
         )
         status = "success" if result["exit_code"] == 0 else "failed"
-        return run_repo.complete(
+        return run_crud.complete(
+            session,
             run_id,
             status=status,
             stdout=result["stdout"],
@@ -120,41 +133,55 @@ def execute_task(
             activity=result.get("activity", ""),
         )
     except Exception as e:
-        return run_repo.complete(
-            run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
+        return run_crud.complete(
+            session, run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
         )
 
 
 def execute_task_background(
-    task: dict,
-    run_repo: RunRepo,
+    task: Task,
+    session_factory: sessionmaker,
     trigger: str = "manual",
     runner: Callable | None = None,
-) -> dict:
-    """Execute a task in a background thread. Returns the initial run dict (status=running)."""
+) -> Run:
+    """Execute a task in a background thread. Returns the initial Run (status=running)."""
     if runner is None:
         runner = run_claude
-    run = run_repo.create(task_id=task["id"], trigger=trigger)
+    session = session_factory()
+    try:
+        run = run_crud.create(session, task_id=task.id, trigger=trigger)
+        session.expunge(run)
+    finally:
+        session.close()
+
     threading.Thread(
         target=_background_worker,
-        args=(task, run["id"], runner, run_repo),
+        args=(task.prompt, task.allowed_tools, run.id, runner, session_factory),
         daemon=True,
     ).start()
     return run
 
 
-def _background_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> None:
+def _background_worker(
+    prompt: str,
+    allowed_tools: str | None,
+    run_id: str,
+    runner: Callable,
+    session_factory: sessionmaker,
+) -> None:
+    session = session_factory()
     try:
         result = runner(
-            task["prompt"],
-            allowed_tools=task.get("allowed_tools"),
+            prompt,
+            allowed_tools=allowed_tools,
             run_id=run_id,
-            on_output=lambda stdout, activity: run_repo.update_output(
-                run_id, stdout, activity
+            on_output=lambda stdout, activity: run_crud.update_output(
+                session, run_id, stdout, activity
             ),
         )
         status = "success" if result["exit_code"] == 0 else "failed"
-        run_repo.complete(
+        run_crud.complete(
+            session,
             run_id,
             status=status,
             stdout=result["stdout"],
@@ -163,20 +190,27 @@ def _background_worker(task: dict, run_id: str, runner: Callable, run_repo: RunR
             activity=result.get("activity", ""),
         )
     except Exception as e:
-        run_repo.complete(
-            run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
+        run_crud.complete(
+            session, run_id, status="failed", stdout="", stderr=str(e), exit_code=-1
         )
+    finally:
+        session.close()
 
 
-def cancel_task_run(run_id: str, run_repo: RunRepo) -> None:
+def cancel_task_run(run_id: str, session: Session) -> None:
     """Cancel a running task. Raises RunNotFoundError or ValueError."""
-    run = run_repo.get(run_id)
+    run = run_crud.get(session, run_id)
     if not run:
         raise RunNotFoundError(run_id)
-    if run["status"] != "running":
+    if run.status != "running":
         raise ValueError("Run is not active")
     killed = cancel_run(run_id)
     if not killed:
-        run_repo.complete(
-            run_id, status="failed", stdout="", stderr="Cancelled", exit_code=-1
+        run_crud.complete(
+            session,
+            run_id,
+            status="failed",
+            stdout="",
+            stderr="Cancelled",
+            exit_code=-1,
         )
