@@ -20,6 +20,7 @@
     <div class="log-output">{{ task.prompt }}</div>
     <div style="margin-top:1rem; display:flex; gap:2rem;">
         <div><span class="text-dim text-sm">Schedule:</span> {{ task.cron_expression or "Manual only" }}</div>
+        <div><span class="text-dim text-sm">Model:</span> {{ task.model }}</div>
         <div><span class="text-dim text-sm">Tools:</span> {{ task.allowed_tools or "All" }}</div>
         <div>
             {% if task.enabled %}
