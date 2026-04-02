@@ -10,7 +10,7 @@ from app.runner import run_claude, validate_tools
 def _make_stream_lines(text="response", is_error=False):
     """Build stream-json lines that claude CLI would emit."""
     lines = []
-    # assistant event with accumulated text
+    # assistant event with text
     lines.append(json.dumps({
         "type": "assistant",
         "message": {"content": [{"type": "text", "text": text}]},
@@ -21,6 +21,23 @@ def _make_stream_lines(text="response", is_error=False):
         "subtype": "error" if is_error else "success",
         "result": text,
     }))
+    return "\n".join(lines) + "\n"
+
+
+def _make_stream_with_tool_use():
+    """Build stream-json with a tool call and result."""
+    lines = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Bash", "input": {"command": "echo hello"}},
+        ]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": "hello"},
+        ]}}),
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "Done!"},
+        ]}}),
+        json.dumps({"type": "result", "result": "Done!"}),
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -106,9 +123,26 @@ def test_run_claude_streams_output(mock_popen):
     mock_popen.return_value = _make_popen_mock(stdout="streaming result")
     captured = []
     result = run_claude("Stream me", on_output=lambda s: captured.append(s))
-    assert result["stdout"] == "streaming result"
+    assert "streaming result" in result["stdout"]
     assert len(captured) > 0
-    assert captured[-1] == "streaming result"
+
+
+@patch("app.runner._FLUSH_INTERVAL", 0)
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_shows_tool_activity(mock_popen):
+    proc = MagicMock()
+    proc.stdout = io.StringIO(_make_stream_with_tool_use())
+    proc.stderr = MagicMock()
+    proc.stderr.read.return_value = ""
+    proc.returncode = 0
+    proc.wait = MagicMock()
+    mock_popen.return_value = proc
+    captured = []
+    result = run_claude("Do stuff", on_output=lambda s: captured.append(s))
+    output = result["stdout"]
+    assert "[Bash] echo hello" in output
+    assert "hello" in output
+    assert "Done!" in output
 
 
 # --- Tool validation tests ---

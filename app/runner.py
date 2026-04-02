@@ -99,8 +99,9 @@ def _read_stream(
     timeout: int,
     on_output: Callable[[str], None] | None,
 ) -> str:
-    """Parse stream-json output, extract text, flush periodically."""
-    current_text = ""
+    """Parse stream-json output, build activity log, flush periodically."""
+    activity: list[str] = []
+    final_result = ""
     last_flush = time.monotonic()
     deadline = time.monotonic() + timeout
 
@@ -118,29 +119,58 @@ def _read_stream(
         except json.JSONDecodeError:
             continue
 
-        # Extract text from assistant messages (accumulated content)
-        if event.get("type") == "assistant":
-            content = event.get("message", {}).get("content", [])
-            text_parts = [c["text"] for c in content if c.get("type") == "text"]
-            if text_parts:
-                current_text = "".join(text_parts)
+        evt_type = event.get("type")
+        content = event.get("message", {}).get("content", [])
 
-        # Final result has the complete output
-        elif event.get("type") == "result":
-            current_text = event.get("result", current_text)
+        if evt_type == "assistant":
+            for block in content:
+                btype = block.get("type")
+                if btype == "tool_use":
+                    name = block.get("name", "?")
+                    inp = block.get("input", {})
+                    # Show what tool is being called
+                    if name == "Bash":
+                        cmd = inp.get("command", "")
+                        activity.append(f"[Bash] {cmd}")
+                    elif name == "Read":
+                        activity.append(f"[Read] {inp.get('file_path', '')}")
+                    elif name == "Write":
+                        activity.append(f"[Write] {inp.get('file_path', '')}")
+                    elif name == "Edit":
+                        activity.append(f"[Edit] {inp.get('file_path', '')}")
+                    else:
+                        activity.append(f"[{name}]")
+                elif btype == "text":
+                    text = block.get("text", "")
+                    if text.strip():
+                        activity.append(text)
 
-        # Flush partial output periodically
-        if on_output and current_text:
+        elif evt_type == "user":
+            for block in content:
+                if block.get("type") == "tool_result":
+                    result_text = block.get("content", "")
+                    if isinstance(result_text, str) and result_text.strip():
+                        # Truncate long tool outputs for the activity view
+                        if len(result_text) > 500:
+                            result_text = result_text[:500] + "…"
+                        activity.append(f"  → {result_text}")
+
+        elif evt_type == "result":
+            final_result = event.get("result", "")
+
+        # Flush partial activity periodically
+        if on_output and activity:
             now = time.monotonic()
             if now - last_flush >= _FLUSH_INTERVAL:
-                on_output(current_text)
+                on_output("\n".join(activity))
                 last_flush = now
 
     # Final flush
-    if on_output and current_text:
-        on_output(current_text)
+    output = "\n".join(activity) if activity else final_result
+    if on_output:
+        on_output(output)
 
-    return current_text
+    return output
 
 
 def cancel_run(run_id: str) -> bool:
