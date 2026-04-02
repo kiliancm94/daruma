@@ -102,7 +102,12 @@ class TestExecuteTask:
     def test_success(self, task_svc, run_repo):
         task = task_svc.create(name="T", prompt="p")
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
+            return_value={
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
+            }
         )
         result = execute_task(task, run_repo, runner=mock_runner)
         assert result.status == "success"
@@ -130,7 +135,10 @@ class TestExecuteTask:
         output_calls = []
         mock_runner = MagicMock(
             return_value={
-                "exit_code": 0, "stdout": "done", "stderr": "", "activity": ""
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
             }
         )
 
@@ -145,7 +153,12 @@ class TestExecuteTaskBg:
     def test_returns_running(self, task_svc, session_factory):
         task = task_svc.create(name="T", prompt="p")
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
+            return_value={
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
+            }
         )
         run = execute_task_background(task, session_factory, runner=mock_runner)
         assert run.status == "running"

@@ -200,7 +200,9 @@ def list_runs(task_id, limit, as_json):
         )
         table.add_row(
             r.id[:8],
-            f"[{status_style}]{r.status}[/{status_style}]" if status_style else r.status,
+            f"[{status_style}]{r.status}[/{status_style}]"
+            if status_style
+            else r.status,
             r.trigger,
             duration,
             r.started_at,
@@ -256,13 +258,16 @@ def run_task(task_name_or_id):
 
     def _on_output(stdout: str, activity: str) -> None:
         if stdout and stdout != last_output[0]:
-            new = stdout[len(last_output[0]):]
+            new = stdout[len(last_output[0]) :]
             if new:
                 click.echo(new, nl=False)
             last_output[0] = stdout
 
     result = execute_task(
-        task, run_repo, trigger="manual", on_output=_on_output,
+        task,
+        run_repo,
+        trigger="manual",
+        on_output=_on_output,
     )
     session.close()
     click.echo()

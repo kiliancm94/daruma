@@ -1,7 +1,7 @@
-from app.models.database import Base, Task, Run
+from app.models.database import Base as Base, Task as Task, Run as Run
 from app.models.schemas import (
-    TaskCreate,
-    TaskUpdate,
-    TaskResponse,
-    RunResponse,
+    TaskCreate as TaskCreate,
+    TaskUpdate as TaskUpdate,
+    TaskResponse as TaskResponse,
+    RunResponse as RunResponse,
 )

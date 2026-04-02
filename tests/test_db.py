@@ -12,8 +12,14 @@ def test_tasks_table_has_expected_columns(engine):
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("tasks")}
     assert columns == {
-        "id", "name", "prompt", "cron_expression",
-        "allowed_tools", "enabled", "created_at", "updated_at",
+        "id",
+        "name",
+        "prompt",
+        "cron_expression",
+        "allowed_tools",
+        "enabled",
+        "created_at",
+        "updated_at",
     }
 
 
@@ -21,7 +27,15 @@ def test_runs_table_has_expected_columns(engine):
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("runs")}
     assert columns == {
-        "id", "task_id", "trigger", "status", "started_at",
-        "finished_at", "duration_ms", "stdout", "stderr", "exit_code",
+        "id",
+        "task_id",
+        "trigger",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration_ms",
+        "stdout",
+        "stderr",
+        "exit_code",
         "activity",
     }

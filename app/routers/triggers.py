@@ -46,7 +46,9 @@ def manual_trigger(
         task = task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_background(task, session_factory, trigger="manual", runner=runner)
+    return execute_task_background(
+        task, session_factory, trigger="manual", runner=runner
+    )
 
 
 @router.post("/api/trigger/{task_name}", response_model=RunResponse)
@@ -60,7 +62,9 @@ def webhook_trigger(
         task = task_service.get_by_name(task_name)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_background(task, session_factory, trigger="webhook", runner=runner)
+    return execute_task_background(
+        task, session_factory, trigger="webhook", runner=runner
+    )
 
 
 @router.post("/api/runs/{run_id}/cancel")

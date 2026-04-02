@@ -32,8 +32,11 @@ def sync_jobs(
             continue
         parts = task.cron_expression.split()
         trigger = CronTrigger(
-            minute=parts[0], hour=parts[1], day=parts[2],
-            month=parts[3], day_of_week=parts[4],
+            minute=parts[0],
+            hour=parts[1],
+            day=parts[2],
+            month=parts[3],
+            day_of_week=parts[4],
         )
         scheduler.add_job(
             execute_fn,

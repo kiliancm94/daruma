@@ -5,8 +5,14 @@ from app.scheduler import sync_jobs
 
 def _make_task(**kwargs):
     """Create a task-like object with attribute access."""
-    defaults = {"id": "abc", "name": "T", "prompt": "p",
-                "cron_expression": None, "allowed_tools": None, "enabled": True}
+    defaults = {
+        "id": "abc",
+        "name": "T",
+        "prompt": "p",
+        "cron_expression": None,
+        "allowed_tools": None,
+        "enabled": True,
+    }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
 

@@ -99,10 +99,12 @@ def execute_task(
     run_id = run.id
 
     if on_output:
+
         def _combined(stdout: str, activity: str) -> None:
             run_repo.update_output(run_id, stdout, activity)
             on_output(stdout, activity)
     else:
+
         def _combined(stdout: str, activity: str) -> None:
             run_repo.update_output(run_id, stdout, activity)
 

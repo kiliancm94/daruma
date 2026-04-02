@@ -47,14 +47,22 @@ class TaskRepo:
     def list(self) -> list[Task]:
         return self.session.query(Task).order_by(Task.created_at.desc()).all()
 
-    _UPDATABLE_FIELDS = {"name", "prompt", "cron_expression", "allowed_tools", "enabled"}
+    _UPDATABLE_FIELDS = {
+        "name",
+        "prompt",
+        "cron_expression",
+        "allowed_tools",
+        "enabled",
+    }
 
     def update(self, task_id: str, **fields) -> Task | None:
         task = self.get(task_id)
         if task is None:
             return None
         updates = {
-            k: v for k, v in fields.items() if k in self._UPDATABLE_FIELDS and v is not None
+            k: v
+            for k, v in fields.items()
+            if k in self._UPDATABLE_FIELDS and v is not None
         }
         if not updates:
             return task

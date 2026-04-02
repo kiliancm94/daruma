@@ -20,9 +20,7 @@ def client(app):
 
 
 def test_create_task(client):
-    resp = client.post("/api/tasks", json={
-        "name": "Test", "prompt": "Do it"
-    })
+    resp = client.post("/api/tasks", json={"name": "Test", "prompt": "Do it"})
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Test"

@@ -37,7 +37,9 @@ def tasks_list(
     for task in tasks:
         d = TaskResponse.model_validate(task).model_dump()
         last_run = run_service.last_run(task.id)
-        d["last_run"] = RunResponse.model_validate(last_run).model_dump() if last_run else None
+        d["last_run"] = (
+            RunResponse.model_validate(last_run).model_dump() if last_run else None
+        )
         task_data.append(d)
     return templates.TemplateResponse(request, "tasks_list.html", {"tasks": task_data})
 
@@ -143,6 +145,4 @@ def run_card(
         run = run_service.get(run_id)
     except RunNotFoundError:
         raise HTTPException(404, "Run not found")
-    return templates.TemplateResponse(
-        request, "partials/run_card.html", {"run": run}
-    )
+    return templates.TemplateResponse(request, "partials/run_card.html", {"run": run})
