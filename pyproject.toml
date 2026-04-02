@@ -10,6 +10,8 @@ dependencies = [
     "python-multipart>=0.0.18",
     "apscheduler>=3.10.0,<4",
     "click>=8.1",
+    "sqlalchemy>=2.0",
+    "rich>=13.0",
 ]
 
 [project.scripts]
