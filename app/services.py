@@ -125,7 +125,7 @@ def execute_task(
         )
 
 
-def execute_task_bg(
+def execute_task_background(
     task: dict,
     run_repo: RunRepo,
     trigger: str = "manual",
@@ -136,14 +136,14 @@ def execute_task_bg(
         runner = run_claude
     run = run_repo.create(task_id=task["id"], trigger=trigger)
     threading.Thread(
-        target=_bg_worker,
+        target=_background_worker,
         args=(task, run["id"], runner, run_repo),
         daemon=True,
     ).start()
     return run
 
 
-def _bg_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> None:
+def _background_worker(task: dict, run_id: str, runner: Callable, run_repo: RunRepo) -> None:
     try:
         result = runner(
             task["prompt"],

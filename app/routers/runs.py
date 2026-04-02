@@ -12,14 +12,14 @@ def get_run_service() -> RunService:
 
 @router.get("", response_model=list[RunResponse])
 def list_runs(
-    task_id: str | None = None, svc: RunService = Depends(get_run_service)
+    task_id: str | None = None, run_service: RunService = Depends(get_run_service)
 ):
-    return svc.list(task_id=task_id)
+    return run_service.list(task_id=task_id)
 
 
 @router.get("/{run_id}", response_model=RunResponse)
-def get_run(run_id: str, svc: RunService = Depends(get_run_service)):
+def get_run(run_id: str, run_service: RunService = Depends(get_run_service)):
     try:
-        return svc.get(run_id)
+        return run_service.get(run_id)
     except RunNotFoundError:
         raise HTTPException(404, "Run not found")

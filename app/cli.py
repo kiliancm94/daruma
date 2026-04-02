@@ -34,11 +34,11 @@ def tasks():
 
 
 @tasks.command("list")
-def tasks_list():
+def list_tasks():
     """List all tasks."""
     conn = _connect()
-    svc = TaskService(TaskRepo(conn))
-    items = svc.list()
+    task_service = TaskService(TaskRepo(conn))
+    items = task_service.list()
     conn.close()
     if not items:
         click.echo("No tasks found.")
@@ -58,11 +58,11 @@ def tasks_list():
 @click.option("--cron", default=None, help="Cron expression (5-field)")
 @click.option("--tools", default=None, help="Comma-separated allowed tools")
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
-def tasks_create(name, prompt, cron, tools, disabled):
+def create_task(name, prompt, cron, tools, disabled):
     """Create a new task."""
     conn = _connect()
-    svc = TaskService(TaskRepo(conn))
-    task = svc.create(
+    task_service = TaskService(TaskRepo(conn))
+    task = task_service.create(
         name=name,
         prompt=prompt,
         cron_expression=cron,
@@ -75,11 +75,11 @@ def tasks_create(name, prompt, cron, tools, disabled):
 
 @tasks.command("show")
 @click.argument("task_id")
-def tasks_show(task_id):
+def show_task(task_id):
     """Show task details. Accepts full ID, partial ID, or name."""
     conn = _connect()
-    svc = TaskService(TaskRepo(conn))
-    task = _resolve_task(svc, task_id)
+    task_service = TaskService(TaskRepo(conn))
+    task = _resolve_task(task_service, task_id)
     conn.close()
     click.echo(f"ID:      {task['id']}")
     click.echo(f"Name:    {task['name']}")
@@ -98,11 +98,11 @@ def tasks_show(task_id):
 @click.option("--cron", default=None)
 @click.option("--tools", default=None)
 @click.option("--enable/--disable", default=None)
-def tasks_edit(task_id, name, prompt, cron, tools, enable):
+def edit_task(task_id, name, prompt, cron, tools, enable):
     """Update a task."""
     conn = _connect()
-    svc = TaskService(TaskRepo(conn))
-    task = _resolve_task(svc, task_id)
+    task_service = TaskService(TaskRepo(conn))
+    task = _resolve_task(task_service, task_id)
     fields = {}
     if name is not None:
         fields["name"] = name
@@ -117,7 +117,7 @@ def tasks_edit(task_id, name, prompt, cron, tools, enable):
     if not fields:
         click.echo("Nothing to update.")
         return
-    updated = svc.update(task["id"], **fields)
+    updated = task_service.update(task["id"], **fields)
     conn.close()
     click.echo(f"Updated task: {updated['name']} ({updated['id'][:8]})")
 
@@ -125,14 +125,14 @@ def tasks_edit(task_id, name, prompt, cron, tools, enable):
 @tasks.command("delete")
 @click.argument("task_id")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def tasks_delete(task_id, yes):
+def delete_task(task_id, yes):
     """Delete a task."""
     conn = _connect()
-    svc = TaskService(TaskRepo(conn))
-    task = _resolve_task(svc, task_id)
+    task_service = TaskService(TaskRepo(conn))
+    task = _resolve_task(task_service, task_id)
     if not yes:
         click.confirm(f"Delete task '{task['name']}'?", abort=True)
-    svc.delete(task["id"])
+    task_service.delete(task["id"])
     conn.close()
     click.echo(f"Deleted task: {task['name']}")
 
@@ -148,18 +148,18 @@ def runs():
 @runs.command("list")
 @click.option("--task", "task_id", default=None, help="Filter by task ID or name")
 @click.option("--limit", default=20, help="Max runs to show")
-def runs_list(task_id, limit):
+def list_runs(task_id, limit):
     """List recent runs."""
     conn = _connect()
-    run_svc = RunService(RunRepo(conn))
+    run_service = RunService(RunRepo(conn))
 
     resolved_task_id = None
     if task_id:
-        task_svc = TaskService(TaskRepo(conn))
-        task = _resolve_task(task_svc, task_id)
+        task_service = TaskService(TaskRepo(conn))
+        task = _resolve_task(task_service, task_id)
         resolved_task_id = task["id"]
 
-    items = run_svc.list(task_id=resolved_task_id)[:limit]
+    items = run_service.list(task_id=resolved_task_id)[:limit]
     conn.close()
     if not items:
         click.echo("No runs found.")
@@ -175,12 +175,12 @@ def runs_list(task_id, limit):
 
 @runs.command("show")
 @click.argument("run_id")
-def runs_show(run_id):
+def show_run(run_id):
     """Show run details and output."""
     conn = _connect()
-    svc = RunService(RunRepo(conn))
+    run_service = RunService(RunRepo(conn))
     try:
-        run = svc.get(run_id)
+        run = run_service.get(run_id)
     except RunNotFoundError:
         click.echo(f"Run not found: {run_id}", err=True)
         raise SystemExit(1)
@@ -207,10 +207,10 @@ def runs_show(run_id):
 def run_task(task_name_or_id):
     """Run a task now (blocks until complete, streams output)."""
     conn = _connect()
-    task_svc = TaskService(TaskRepo(conn))
+    task_service = TaskService(TaskRepo(conn))
     run_repo = RunRepo(conn)
 
-    task = _resolve_task(task_svc, task_name_or_id)
+    task = _resolve_task(task_service, task_name_or_id)
     click.echo(f"Running task: {task['name']}…\n")
 
     last_output = [""]
@@ -240,20 +240,20 @@ def run_task(task_name_or_id):
 # ── Helpers ────────────────────────────────────────────
 
 
-def _resolve_task(svc: TaskService, identifier: str) -> dict:
+def _resolve_task(task_service: TaskService, identifier: str) -> dict:
     """Resolve a task by full ID, partial ID (prefix), or name."""
     # Try exact ID
     try:
-        return svc.get(identifier)
+        return task_service.get(identifier)
     except TaskNotFoundError:
         pass
     # Try by name
     try:
-        return svc.get_by_name(identifier)
+        return task_service.get_by_name(identifier)
     except TaskNotFoundError:
         pass
     # Try prefix match
-    all_tasks = svc.list()
+    all_tasks = task_service.list()
     matches = [t for t in all_tasks if t["id"].startswith(identifier)]
     if len(matches) == 1:
         return matches[0]

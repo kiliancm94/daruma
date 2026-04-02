@@ -11,13 +11,13 @@ def get_task_service() -> TaskService:
 
 
 @router.get("", response_model=list[TaskResponse])
-def list_tasks(svc: TaskService = Depends(get_task_service)):
-    return svc.list()
+def list_tasks(task_service: TaskService = Depends(get_task_service)):
+    return task_service.list()
 
 
 @router.post("", response_model=TaskResponse, status_code=201)
-def create_task(body: TaskCreate, svc: TaskService = Depends(get_task_service)):
-    return svc.create(
+def create_task(body: TaskCreate, task_service: TaskService = Depends(get_task_service)):
+    return task_service.create(
         name=body.name,
         prompt=body.prompt,
         cron_expression=body.cron_expression,
@@ -27,27 +27,27 @@ def create_task(body: TaskCreate, svc: TaskService = Depends(get_task_service)):
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-def get_task(task_id: str, svc: TaskService = Depends(get_task_service)):
+def get_task(task_id: str, task_service: TaskService = Depends(get_task_service)):
     try:
-        return svc.get(task_id)
+        return task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
 def update_task(
-    task_id: str, body: TaskUpdate, svc: TaskService = Depends(get_task_service)
+    task_id: str, body: TaskUpdate, task_service: TaskService = Depends(get_task_service)
 ):
     try:
-        return svc.update(task_id, **body.model_dump(exclude_unset=True))
+        return task_service.update(task_id, **body.model_dump(exclude_unset=True))
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: str, svc: TaskService = Depends(get_task_service)):
+def delete_task(task_id: str, task_service: TaskService = Depends(get_task_service)):
     try:
-        svc.delete(task_id)
+        task_service.delete(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     return Response(status_code=204)

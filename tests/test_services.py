@@ -10,7 +10,7 @@ from app.services import (
     TaskNotFoundError,
     RunNotFoundError,
     execute_task,
-    execute_task_bg,
+    execute_task_background,
     cancel_task_run,
 )
 
@@ -151,7 +151,7 @@ class TestExecuteTask:
         mock_runner.assert_called_once()
 
 
-# ── execute_task_bg ────────────────────────────────────
+# ── execute_task_background ────────────────────────────────────
 
 
 class TestExecuteTaskBg:
@@ -160,7 +160,7 @@ class TestExecuteTaskBg:
         mock_runner = MagicMock(
             return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
         )
-        run = execute_task_bg(task, run_repo, runner=mock_runner)
+        run = execute_task_background(task, run_repo, runner=mock_runner)
         assert run["status"] == "running"
         time.sleep(0.1)
         completed = run_repo.get(run["id"])

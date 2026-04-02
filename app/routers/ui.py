@@ -25,12 +25,12 @@ def get_run_service() -> RunService:
 @router.get("/", response_class=HTMLResponse)
 def tasks_list(
     request: Request,
-    task_svc: TaskService = Depends(get_task_service),
-    run_svc: RunService = Depends(get_run_service),
+    task_service: TaskService = Depends(get_task_service),
+    run_service: RunService = Depends(get_run_service),
 ):
-    tasks = task_svc.list()
+    tasks = task_service.list()
     for task in tasks:
-        task["last_run"] = run_svc.last_run(task["id"])
+        task["last_run"] = run_service.last_run(task["id"])
     return templates.TemplateResponse(request, "tasks_list.html", {"tasks": tasks})
 
 
@@ -46,9 +46,9 @@ def task_create_form(
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
     enabled: str = Form(""),
-    svc: TaskService = Depends(get_task_service),
+    task_service: TaskService = Depends(get_task_service),
 ):
-    svc.create(
+    task_service.create(
         name=name,
         prompt=prompt,
         cron_expression=cron_expression or None,
@@ -62,14 +62,14 @@ def task_create_form(
 def task_detail(
     request: Request,
     task_id: str,
-    task_svc: TaskService = Depends(get_task_service),
-    run_svc: RunService = Depends(get_run_service),
+    task_service: TaskService = Depends(get_task_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
-        task = task_svc.get(task_id)
+        task = task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    runs = run_svc.list(task_id=task_id)
+    runs = run_service.list(task_id=task_id)
     return templates.TemplateResponse(
         request, "task_detail.html", {"task": task, "runs": runs}
     )
@@ -79,10 +79,10 @@ def task_detail(
 def task_edit_form(
     request: Request,
     task_id: str,
-    svc: TaskService = Depends(get_task_service),
+    task_service: TaskService = Depends(get_task_service),
 ):
     try:
-        task = svc.get(task_id)
+        task = task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     return templates.TemplateResponse(request, "task_form.html", {"task": task})
@@ -96,10 +96,10 @@ def task_update_form(
     cron_expression: str = Form(""),
     allowed_tools: str = Form(""),
     enabled: str = Form(""),
-    svc: TaskService = Depends(get_task_service),
+    task_service: TaskService = Depends(get_task_service),
 ):
     try:
-        svc.update(
+        task_service.update(
             task_id,
             name=name,
             prompt=prompt,
@@ -116,10 +116,10 @@ def task_update_form(
 def run_detail(
     request: Request,
     run_id: str,
-    svc: RunService = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
-        run = svc.get(run_id)
+        run = run_service.get(run_id)
     except RunNotFoundError:
         raise HTTPException(404, "Run not found")
     return templates.TemplateResponse(request, "run_detail.html", {"run": run})
@@ -129,10 +129,10 @@ def run_detail(
 def run_card(
     request: Request,
     run_id: str,
-    svc: RunService = Depends(get_run_service),
+    run_service: RunService = Depends(get_run_service),
 ):
     try:
-        run = svc.get(run_id)
+        run = run_service.get(run_id)
     except RunNotFoundError:
         raise HTTPException(404, "Run not found")
     return templates.TemplateResponse(

@@ -9,7 +9,7 @@ from app.services import (
     TaskService,
     RunNotFoundError,
     TaskNotFoundError,
-    execute_task_bg,
+    execute_task_background,
     cancel_task_run,
 )
 
@@ -31,29 +31,29 @@ def get_runner() -> Callable:
 @router.post("/api/tasks/{task_id}/run", response_model=RunResponse)
 def manual_trigger(
     task_id: str,
-    task_svc: TaskService = Depends(get_task_service),
+    task_service: TaskService = Depends(get_task_service),
     run_repo: RunRepo = Depends(get_run_repo),
     runner: Callable = Depends(get_runner),
 ):
     try:
-        task = task_svc.get(task_id)
+        task = task_service.get(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_bg(task, run_repo, trigger="manual", runner=runner)
+    return execute_task_background(task, run_repo, trigger="manual", runner=runner)
 
 
 @router.post("/api/trigger/{task_name}", response_model=RunResponse)
 def webhook_trigger(
     task_name: str,
-    task_svc: TaskService = Depends(get_task_service),
+    task_service: TaskService = Depends(get_task_service),
     run_repo: RunRepo = Depends(get_run_repo),
     runner: Callable = Depends(get_runner),
 ):
     try:
-        task = task_svc.get_by_name(task_name)
+        task = task_service.get_by_name(task_name)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    return execute_task_bg(task, run_repo, trigger="webhook", runner=runner)
+    return execute_task_background(task, run_repo, trigger="webhook", runner=runner)
 
 
 @router.post("/api/runs/{run_id}/cancel")
