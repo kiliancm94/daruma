@@ -38,13 +38,10 @@ app/
 - Raise exceptions on not-found — don't return `None` or `bool`; let the caller handle the exception
 - Don't define updatable field sets manually — use a Pydantic model to constrain which fields are updatable
 
-### Push defaults and computed fields into models/schemas, not CRUD
+### Push defaults into models/schemas, not CRUD
 
 - Timestamps (`created_at`, `updated_at`) and IDs should use model-level defaults
-- CRUD functions should not manually set values that the model or schema can generate
-- Use Pydantic `Field(default_factory=...)` to auto-inject timestamps in update/complete schemas (e.g. `updated_at: str = Field(default_factory=utcnow)`)
-- Use Pydantic `model_validator` for computed fields (e.g. `duration_ms` from `started_at` and `finished_at`)
-- CRUD just applies `schema.model_dump()` — no timestamp or computation logic in CRUD
+- CRUD functions should not manually set values that the model can generate
 
 ### Don't duplicate utility functions
 
