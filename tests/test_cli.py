@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -42,11 +42,16 @@ class TestTaskCommands:
         result = runner.invoke(
             cli,
             [
-                "tasks", "create",
-                "--name", "Cron Task",
-                "--prompt", "Run daily",
-                "--cron", "0 8 * * 1-5",
-                "--tools", "Bash,Read",
+                "tasks",
+                "create",
+                "--name",
+                "Cron Task",
+                "--prompt",
+                "Run daily",
+                "--cron",
+                "0 8 * * 1-5",
+                "--tools",
+                "Bash,Read",
                 "--disabled",
             ],
         )
@@ -54,28 +59,32 @@ class TestTaskCommands:
         assert "Created task: Cron Task" in result.output
 
     def test_show(self, runner, mock_db):
-        runner.invoke(
-            cli, ["tasks", "create", "--name", "Show Me", "--prompt", "p"]
-        )
+        runner.invoke(cli, ["tasks", "create", "--name", "Show Me", "--prompt", "p"])
         result = runner.invoke(cli, ["tasks", "show", "Show Me"])
         assert result.exit_code == 0
         assert "Name:    Show Me" in result.output
         assert "Prompt:  p" in result.output
 
+    def test_show_json(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "JSON Task", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "show", "JSON Task", "--json"])
+        assert result.exit_code == 0
+        assert "JSON Task" in result.output
+
+    def test_list_json(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "A", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "list", "--json"])
+        assert result.exit_code == 0
+        assert '"name"' in result.output
+
     def test_edit(self, runner, mock_db):
-        runner.invoke(
-            cli, ["tasks", "create", "--name", "Old Name", "--prompt", "p"]
-        )
-        result = runner.invoke(
-            cli, ["tasks", "edit", "Old Name", "--name", "New Name"]
-        )
+        runner.invoke(cli, ["tasks", "create", "--name", "Old Name", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "edit", "Old Name", "--name", "New Name"])
         assert result.exit_code == 0
         assert "Updated task: New Name" in result.output
 
     def test_delete_with_confirm(self, runner, mock_db):
-        runner.invoke(
-            cli, ["tasks", "create", "--name", "Doomed", "--prompt", "p"]
-        )
+        runner.invoke(cli, ["tasks", "create", "--name", "Doomed", "--prompt", "p"])
         result = runner.invoke(cli, ["tasks", "delete", "Doomed", "-y"])
         assert result.exit_code == 0
         assert "Deleted task: Doomed" in result.output
@@ -96,9 +105,7 @@ class TestRunCommands:
         assert "No runs" in result.output
 
     def test_list_with_task_filter(self, runner, mock_db):
-        runner.invoke(
-            cli, ["tasks", "create", "--name", "Filterable", "--prompt", "p"]
-        )
+        runner.invoke(cli, ["tasks", "create", "--name", "Filterable", "--prompt", "p"])
         result = runner.invoke(cli, ["runs", "list", "--task", "Filterable"])
         assert result.exit_code == 0
         assert "No runs" in result.output
@@ -121,9 +128,7 @@ class TestRunExecution:
             assert "Status: success" in result.output
 
     def test_run_task_failure(self, runner, mock_db):
-        runner.invoke(
-            cli, ["tasks", "create", "--name", "Failing", "--prompt", "fail"]
-        )
+        runner.invoke(cli, ["tasks", "create", "--name", "Failing", "--prompt", "fail"])
         with patch("app.services.run_claude") as mock_claude:
             mock_claude.return_value = {
                 "exit_code": 1,

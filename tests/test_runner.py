@@ -1,6 +1,5 @@
 import io
 import json
-import subprocess
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -11,31 +10,64 @@ def _make_stream_lines(text="response", is_error=False):
     """Build stream-json lines that claude CLI would emit."""
     lines = []
     # assistant event with text
-    lines.append(json.dumps({
-        "type": "assistant",
-        "message": {"content": [{"type": "text", "text": text}]},
-    }))
+    lines.append(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+    )
     # result event
-    lines.append(json.dumps({
-        "type": "result",
-        "subtype": "error" if is_error else "success",
-        "result": text,
-    }))
+    lines.append(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "error" if is_error else "success",
+                "result": text,
+            }
+        )
+    )
     return "\n".join(lines) + "\n"
 
 
 def _make_stream_with_tool_use():
     """Build stream-json with a tool call and result."""
     lines = [
-        json.dumps({"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "name": "Bash", "input": {"command": "echo hello"}},
-        ]}}),
-        json.dumps({"type": "user", "message": {"content": [
-            {"type": "tool_result", "content": "hello"},
-        ]}}),
-        json.dumps({"type": "assistant", "message": {"content": [
-            {"type": "text", "text": "Done!"},
-        ]}}),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Bash",
+                            "input": {"command": "echo hello"},
+                        },
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "content": "hello"},
+                    ]
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "Done!"},
+                    ]
+                },
+            }
+        ),
         json.dumps({"type": "result", "result": "Done!"}),
     ]
     return "\n".join(lines) + "\n"
@@ -55,9 +87,7 @@ def _make_popen_mock(returncode=0, stdout="response", stderr=""):
 
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_success(mock_popen):
-    mock_popen.return_value = _make_popen_mock(
-        returncode=0, stdout="Hello from Claude"
-    )
+    mock_popen.return_value = _make_popen_mock(returncode=0, stdout="Hello from Claude")
     result = run_claude("Say hello", allowed_tools=None)
     assert result["exit_code"] == 0
     assert result["stdout"] == "Hello from Claude"
@@ -91,10 +121,12 @@ def test_run_claude_failure(mock_popen):
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_timeout(mock_popen):
     proc = MagicMock()
+
     # Yield lines slowly — deadline of 0 will be exceeded on first line
     def slow_iter():
         yield '{"type":"system","subtype":"init"}\n'
         yield '{"type":"system","subtype":"init"}\n'
+
     proc.stdout = slow_iter()
     proc.stderr = MagicMock()
     proc.stderr.read.return_value = ""
@@ -112,6 +144,7 @@ def test_run_claude_timeout(mock_popen):
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_tracks_process(mock_popen):
     from app.runner import _active_processes
+
     mock_popen.return_value = _make_popen_mock()
     run_claude("Track me", run_id="test-run-123")
     assert "test-run-123" not in _active_processes
@@ -122,7 +155,9 @@ def test_run_claude_tracks_process(mock_popen):
 def test_run_claude_streams_output(mock_popen):
     mock_popen.return_value = _make_popen_mock(stdout="streaming result")
     captured = []
-    result = run_claude("Stream me", on_output=lambda out, act: captured.append((out, act)))
+    result = run_claude(
+        "Stream me", on_output=lambda out, act: captured.append((out, act))
+    )
     assert "streaming result" in result["stdout"]
     assert len(captured) > 0
 
@@ -144,6 +179,7 @@ def test_run_claude_separates_output_and_activity(mock_popen):
 
 
 # --- Tool validation tests ---
+
 
 def test_validate_tools_accepts_valid():
     assert validate_tools("Bash,Read") == "Bash,Read"
