@@ -16,7 +16,6 @@ def mock_db(db_path):
     """Patch DB_PATH so CLI uses the test database."""
     with patch("app.cli.DB_PATH", db_path):
         from app.db import init_db
-
         init_db(db_path)
         yield
 
@@ -61,6 +60,22 @@ class TestTaskCommands:
         assert result.exit_code == 0
         assert "Name:    Show Me" in result.output
         assert "Prompt:  p" in result.output
+
+    def test_show_json(self, runner, mock_db):
+        runner.invoke(
+            cli, ["tasks", "create", "--name", "JSON Task", "--prompt", "p"]
+        )
+        result = runner.invoke(cli, ["tasks", "show", "JSON Task", "--json"])
+        assert result.exit_code == 0
+        assert "JSON Task" in result.output
+
+    def test_list_json(self, runner, mock_db):
+        runner.invoke(
+            cli, ["tasks", "create", "--name", "A", "--prompt", "p"]
+        )
+        result = runner.invoke(cli, ["tasks", "list", "--json"])
+        assert result.exit_code == 0
+        assert '"name"' in result.output
 
     def test_edit(self, runner, mock_db):
         runner.invoke(

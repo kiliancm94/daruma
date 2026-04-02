@@ -2,22 +2,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.repository import TaskRepo, RunRepo
-from app.services import RunService
-from app.routers.runs import router, get_run_service
+from app.crud import TaskRepo, RunRepo
+from app.db import get_db
+from app.routers.runs import router
 
 
 @pytest.fixture
-def repos(db_conn):
-    return TaskRepo(db_conn), RunRepo(db_conn)
+def repos(db_session):
+    return TaskRepo(db_session), RunRepo(db_session)
 
 
 @pytest.fixture
-def app(repos):
+def app(db_session):
     app = FastAPI()
     app.include_router(router)
-    _, run_repo = repos
-    app.dependency_overrides[get_run_service] = lambda: RunService(run_repo)
+    app.dependency_overrides[get_db] = lambda: db_session
     return app
 
 
@@ -30,15 +29,15 @@ def client(app):
 def task_with_runs(repos):
     task_repo, run_repo = repos
     task = task_repo.create(name="T", prompt="p")
-    r1 = run_repo.create(task_id=task["id"], trigger="manual")
-    run_repo.complete(r1["id"], status="success", stdout="ok", stderr="", exit_code=0)
-    r2 = run_repo.create(task_id=task["id"], trigger="cron")
+    r1 = run_repo.create(task_id=task.id, trigger="manual")
+    run_repo.complete(r1.id, status="success", stdout="ok", stderr="", exit_code=0)
+    r2 = run_repo.create(task_id=task.id, trigger="cron")
     return task, r1, r2
 
 
 def test_list_runs_for_task(client, task_with_runs):
     task, _, _ = task_with_runs
-    resp = client.get(f"/api/runs?task_id={task['id']}")
+    resp = client.get(f"/api/runs?task_id={task.id}")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
 
@@ -51,7 +50,7 @@ def test_list_all_runs(client, task_with_runs):
 
 def test_get_run(client, task_with_runs):
     _, r1, _ = task_with_runs
-    resp = client.get(f"/api/runs/{r1['id']}")
+    resp = client.get(f"/api/runs/{r1.id}")
     assert resp.status_code == 200
     assert resp.json()["trigger"] == "manual"
 
