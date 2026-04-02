@@ -14,6 +14,7 @@ def create(
     prompt: str,
     cron_expression: str | None = None,
     allowed_tools: str | None = None,
+    model: str = "sonnet",
     enabled: bool = True,
 ) -> Task:
     task = Task(
@@ -21,6 +22,7 @@ def create(
         prompt=prompt,
         cron_expression=cron_expression,
         allowed_tools=allowed_tools,
+        model=model,
         enabled=enabled,
     )
     session.add(task)

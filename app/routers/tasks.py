@@ -26,6 +26,7 @@ def create_task(
         prompt=body.prompt,
         cron_expression=body.cron_expression,
         allowed_tools=body.allowed_tools,
+        model=body.model,
         enabled=body.enabled,
     )
 

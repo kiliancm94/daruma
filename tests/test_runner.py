@@ -96,6 +96,18 @@ def test_run_claude_success(mock_popen):
     assert cmd[0] == "claude"
     assert "-p" in cmd
     assert "--output-format" in cmd
+    assert "--model" in cmd
+    model_idx = cmd.index("--model")
+    assert cmd[model_idx + 1] == "sonnet"
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_with_model(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff", model="opus")
+    cmd = mock_popen.call_args[0][0]
+    model_idx = cmd.index("--model")
+    assert cmd[model_idx + 1] == "opus"
 
 
 @patch("app.runner.subprocess.Popen")

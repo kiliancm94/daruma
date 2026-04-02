@@ -8,6 +8,7 @@ from rich.table import Table
 
 from app.config import DB_PATH
 from app.db import init_db, get_session
+from app.runner import VALID_MODELS, DEFAULT_MODEL
 from app.schemas.task import TaskResponse
 from app.schemas.run import RunResponse
 from app.services import (
@@ -57,12 +58,13 @@ def list_tasks(as_json):
     table = Table(show_edge=False, pad_edge=False)
     table.add_column("ID", style="dim", max_width=8)
     table.add_column("Name")
+    table.add_column("Model", style="cyan")
     table.add_column("Schedule", style="dim")
     table.add_column("Status")
     for t in items:
         status = "[green]enabled[/green]" if t.enabled else "[red]disabled[/red]"
         cron = t.cron_expression or "manual only"
-        table.add_row(t.id[:8], t.name, cron, status)
+        table.add_row(t.id[:8], t.name, t.model, cron, status)
     console.print(table)
 
 
@@ -71,8 +73,15 @@ def list_tasks(as_json):
 @click.option("--prompt", required=True, help="Claude prompt")
 @click.option("--cron", default=None, help="Cron expression (5-field)")
 @click.option("--tools", default=None, help="Comma-separated allowed tools")
+@click.option(
+    "--model",
+    type=click.Choice(VALID_MODELS, case_sensitive=False),
+    default=DEFAULT_MODEL,
+    show_default=True,
+    help="Claude model to use",
+)
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
-def create_task(name, prompt, cron, tools, disabled):
+def create_task(name, prompt, cron, tools, model, disabled):
     """Create a new task."""
     session = _connect()
     task_service = TaskService(session)
@@ -81,6 +90,7 @@ def create_task(name, prompt, cron, tools, disabled):
         prompt=prompt,
         cron_expression=cron,
         allowed_tools=tools,
+        model=model,
         enabled=not disabled,
     )
     session.close()
@@ -102,6 +112,7 @@ def show_task(task_id, as_json):
     click.echo(f"ID:      {task.id}")
     click.echo(f"Name:    {task.name}")
     click.echo(f"Prompt:  {task.prompt}")
+    click.echo(f"Model:   {task.model}")
     click.echo(f"Cron:    {task.cron_expression or 'none'}")
     click.echo(f"Tools:   {task.allowed_tools or 'all'}")
     click.echo(f"Enabled: {task.enabled}")
@@ -115,8 +126,14 @@ def show_task(task_id, as_json):
 @click.option("--prompt", default=None)
 @click.option("--cron", default=None)
 @click.option("--tools", default=None)
+@click.option(
+    "--model",
+    type=click.Choice(VALID_MODELS, case_sensitive=False),
+    default=None,
+    help="Claude model to use",
+)
 @click.option("--enable/--disable", default=None)
-def edit_task(task_id, name, prompt, cron, tools, enable):
+def edit_task(task_id, name, prompt, cron, tools, model, enable):
     """Update a task."""
     session = _connect()
     task_service = TaskService(session)
@@ -130,6 +147,8 @@ def edit_task(task_id, name, prompt, cron, tools, enable):
         fields["cron_expression"] = cron
     if tools is not None:
         fields["allowed_tools"] = tools
+    if model is not None:
+        fields["model"] = model
     if enable is not None:
         fields["enabled"] = enable
     if not fields:
