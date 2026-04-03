@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, inspect, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models.base import Base
+from app.models.base import Base  # noqa: F401 — ensure models are importable
 from app.models.task import Task  # noqa: F401 — register with Base.metadata
 from app.models.run import Run  # noqa: F401
 
@@ -24,19 +26,15 @@ def _set_sqlite_pragmas(engine) -> None:
         cursor.close()
 
 
-def _migrate(engine) -> None:
-    """Add columns introduced after initial schema (idempotent)."""
-    insp = inspect(engine)
-    task_cols = {col["name"] for col in insp.get_columns("tasks")}
-    if "model" not in task_cols:
-        with engine.begin() as conn:
-            conn.execute(
-                text("ALTER TABLE tasks ADD COLUMN model VARCHAR NOT NULL DEFAULT 'sonnet'")
-            )
+def _run_migrations(db_path: Path) -> None:
+    """Run all pending Alembic migrations."""
+    alembic_cfg = Config(str(Path(__file__).parent.parent / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    command.upgrade(alembic_cfg, "head")
 
 
 def init_db(db_path: Path) -> None:
-    """Create engine, apply pragmas, create tables, configure session factory."""
+    """Create engine, apply pragmas, run migrations, configure session factory."""
     global _engine, _SessionLocal
     db_path.parent.mkdir(parents=True, exist_ok=True)
     _engine = create_engine(
@@ -44,8 +42,7 @@ def init_db(db_path: Path) -> None:
         connect_args={"check_same_thread": False},
     )
     _set_sqlite_pragmas(_engine)
-    Base.metadata.create_all(_engine)
-    _migrate(_engine)
+    _run_migrations(db_path)
     _SessionLocal = sessionmaker(bind=_engine)
 
 
