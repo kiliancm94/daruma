@@ -1,8 +1,18 @@
 """Pydantic schemas for tasks — API and CLI input/output."""
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from enum import StrEnum
 
-VALID_OUTPUT_FORMATS = ("text", "json", "md")
+from pydantic import BaseModel, ConfigDict
+
+
+class OutputFormat(StrEnum):
+    text = "text"
+    json = "json"
+    md = "md"
+
+
+# Kept for click.Choice compatibility in cli.py
+VALID_OUTPUT_FORMATS = tuple(f.value for f in OutputFormat)
 
 
 class TaskCreate(BaseModel):
@@ -12,17 +22,8 @@ class TaskCreate(BaseModel):
     allowed_tools: str | None = None
     model: str = "sonnet"
     enabled: bool = True
-    output_format: str | None = None
+    output_format: OutputFormat | None = None
     output_destination: str | None = None
-
-    @field_validator("output_format")
-    @classmethod
-    def validate_output_format(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_OUTPUT_FORMATS:
-            raise ValueError(
-                f"output_format must be one of: {', '.join(VALID_OUTPUT_FORMATS)}"
-            )
-        return v
 
 
 class TaskUpdate(BaseModel):
@@ -32,17 +33,8 @@ class TaskUpdate(BaseModel):
     allowed_tools: str | None = None
     model: str | None = None
     enabled: bool | None = None
-    output_format: str | None = None
+    output_format: OutputFormat | None = None
     output_destination: str | None = None
-
-    @field_validator("output_format")
-    @classmethod
-    def validate_output_format(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_OUTPUT_FORMATS:
-            raise ValueError(
-                f"output_format must be one of: {', '.join(VALID_OUTPUT_FORMATS)}"
-            )
-        return v
 
 
 class TaskResponse(BaseModel):
@@ -55,7 +47,7 @@ class TaskResponse(BaseModel):
     allowed_tools: str | None
     model: str
     enabled: bool
-    output_format: str | None
+    output_format: OutputFormat | None
     output_destination: str | None
     created_at: str
     updated_at: str
