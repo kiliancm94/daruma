@@ -1,6 +1,8 @@
 import pytest
 
 from app.crud import skills as skill_crud
+from app.crud import task_skills as task_skill_crud
+from app.crud import tasks as task_crud
 from app.crud.exceptions import NotFoundError
 
 
@@ -43,3 +45,37 @@ class TestSkillCrud:
     def test_delete_nonexistent_raises(self, db_session):
         with pytest.raises(NotFoundError):
             skill_crud.delete(db_session, "nonexistent")
+
+
+class TestTaskSkillCrud:
+    def test_assign_and_list(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        skill = skill_crud.create(db_session, name="s", description="d", content="c")
+        task_skill_crud.assign(db_session, task.id, skill.id)
+        skills = task_skill_crud.list_for_task(db_session, task.id)
+        assert len(skills) == 1
+        assert skills[0].id == skill.id
+
+    def test_assign_idempotent(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        skill = skill_crud.create(db_session, name="s", description="d", content="c")
+        task_skill_crud.assign(db_session, task.id, skill.id)
+        task_skill_crud.assign(db_session, task.id, skill.id)
+        assert len(task_skill_crud.list_for_task(db_session, task.id)) == 1
+
+    def test_unassign(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        skill = skill_crud.create(db_session, name="s", description="d", content="c")
+        task_skill_crud.assign(db_session, task.id, skill.id)
+        task_skill_crud.unassign(db_session, task.id, skill.id)
+        assert len(task_skill_crud.list_for_task(db_session, task.id)) == 0
+
+    def test_replace(self, db_session):
+        task = task_crud.create(db_session, name="T", prompt="p")
+        s1 = skill_crud.create(db_session, name="a", description="d", content="c")
+        s2 = skill_crud.create(db_session, name="b", description="d", content="c")
+        task_skill_crud.assign(db_session, task.id, s1.id)
+        task_skill_crud.replace(db_session, task.id, [s2.id])
+        skills = task_skill_crud.list_for_task(db_session, task.id)
+        assert len(skills) == 1
+        assert skills[0].id == s2.id
