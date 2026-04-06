@@ -433,6 +433,20 @@ def import_skill(file_path):
     click.echo(f"Imported skill: {parsed['name']}")
 
 
+@skills.command("sync")
+def sync_skills():
+    """Sync global skills from ~/.claude/skills/ into the database."""
+    session = _connect()
+    skill_service = SkillService(session)
+    result = skill_service.sync_global()
+    session.close()
+    click.echo(
+        f"Synced: {result['created']} created, "
+        f"{result['updated']} updated, "
+        f"{result['unchanged']} unchanged"
+    )
+
+
 # ── Run (execute) ─────────────────────────────────────
 
 

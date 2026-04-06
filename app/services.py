@@ -173,19 +173,48 @@ class SkillService:
                     break
         return results
 
+    def sync_global(self) -> dict:
+        """Sync global skills from ~/.claude/skills/ into DB. Returns counts."""
+        created, updated, unchanged = 0, 0, 0
+        for global_skill in self.list_global():
+            existing = skill_crud.get_by_name(self.session, global_skill["name"])
+            if existing:
+                if (
+                    existing.content != global_skill["content"]
+                    or existing.description != global_skill["description"]
+                ):
+                    skill_crud.update(
+                        self.session,
+                        existing.id,
+                        content=global_skill["content"],
+                        description=global_skill["description"],
+                    )
+                    updated += 1
+                else:
+                    unchanged += 1
+            else:
+                skill_crud.create(
+                    self.session,
+                    name=global_skill["name"],
+                    description=global_skill.get("description", ""),
+                    content=global_skill["content"],
+                    source="global",
+                )
+                created += 1
+        return {"created": created, "updated": updated, "unchanged": unchanged}
+
     def list_all(self) -> list[dict]:
-        """Unified list: local DB skills + global filesystem skills."""
-        local = [
+        """Unified list: all DB skills (local + synced global)."""
+        return [
             {
                 "id": s.id,
                 "name": s.name,
                 "description": s.description,
-                "source": "local",
+                "source": s.source,
                 "content": s.content,
             }
             for s in self.list_local()
         ]
-        return local + self.list_global()
 
     def update(self, skill_id: str, **fields) -> Skill:
         try:

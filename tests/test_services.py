@@ -246,7 +246,7 @@ class TestSkillService:
             skills = svc.list_global()
         assert len(skills) == 1
 
-    def test_list_all_merges(self, tmp_path, db_session):
+    def test_list_all_after_sync(self, tmp_path, db_session):
         skill_dir = tmp_path / "skills" / "ext"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -255,8 +255,49 @@ class TestSkillService:
         svc = SkillService(db_session)
         svc.create(name="local", description="d", content="c")
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            svc.sync_global()
             all_skills = svc.list_all()
         assert len(all_skills) == 2
+
+    def test_sync_global_creates(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "new-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: new-skill\ndescription: New\n---\n# New"
+        )
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            result = svc.sync_global()
+        assert result["created"] == 1
+        assert result["updated"] == 0
+
+    def test_sync_global_updates(self, tmp_path, db_session):
+        svc = SkillService(db_session)
+        svc.create(name="s", description="old", content="old content")
+        skill_dir = tmp_path / "skills" / "s"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: s\ndescription: new\n---\n# Updated"
+        )
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            result = svc.sync_global()
+        assert result["updated"] == 1
+        from app.crud import skills as skill_crud
+
+        updated = skill_crud.get_by_name(db_session, "s")
+        assert "Updated" in updated.content
+
+    def test_sync_global_unchanged(self, tmp_path, db_session):
+        content = "---\nname: s\ndescription: d\n---\n# Body"
+        svc = SkillService(db_session)
+        skill_dir = tmp_path / "skills" / "s"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(content)
+        # First sync creates
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            svc.sync_global()
+            result = svc.sync_global()
+        assert result["unchanged"] == 1
 
     def test_list_global_no_dir(self, tmp_path, db_session):
         svc = SkillService(db_session)
