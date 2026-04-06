@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from app.config import DB_PATH
+from app.utils.env_vars import parse_env_pairs
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
 from app.schemas.task import TaskResponse, OutputFormat, OutputDestination
@@ -107,15 +108,11 @@ def create_task(
     name, prompt, cron, tools, model, disabled, output_format, output_dest, env_pairs
 ):
     """Create a new task."""
-    env_vars = None
-    if env_pairs:
-        env_vars = {}
-        for pair in env_pairs:
-            if "=" not in pair:
-                click.echo(f"Invalid env var (expected KEY=VALUE): {pair}", err=True)
-                raise SystemExit(1)
-            key, _, value = pair.partition("=")
-            env_vars[key] = value
+    try:
+        env_vars = parse_env_pairs(env_pairs)
+    except ValueError as e:
+        click.echo(str(e), err=True)
+        raise SystemExit(1)
     session = _connect()
     task_service = TaskService(session)
     task = task_service.create(
@@ -241,14 +238,11 @@ def edit_task(
     if output_dest is not None:
         fields["output_destination"] = output_dest
     if env_pairs is not None and len(env_pairs) > 0:
-        env_vars = {}
-        for pair in env_pairs:
-            if "=" not in pair:
-                click.echo(f"Invalid env var (expected KEY=VALUE): {pair}", err=True)
-                raise SystemExit(1)
-            key, _, value = pair.partition("=")
-            env_vars[key] = value
-        fields["env_vars"] = env_vars
+        try:
+            fields["env_vars"] = parse_env_pairs(env_pairs)
+        except ValueError as e:
+            click.echo(str(e), err=True)
+            raise SystemExit(1)
     if not fields and skill_names is None:
         click.echo("Nothing to update.")
         return

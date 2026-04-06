@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.crud import task_skills as task_skill_crud
+from app.utils.env_vars import parse_env_text
 from app.schemas.task import TaskResponse
 from app.schemas.run import RunResponse
 from app.services import (
@@ -89,15 +90,7 @@ def task_create_form(
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
-    parsed_env = None
-    if env_vars.strip():
-        parsed_env = {}
-        for line in env_vars.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            key, _, value = line.partition("=")
-            parsed_env[key] = value
+    parsed_env = parse_env_text(env_vars)
     task = task_service.create(
         name=name,
         prompt=prompt,
@@ -183,15 +176,7 @@ def task_update_form(
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
-    parsed_env = None
-    if env_vars.strip():
-        parsed_env = {}
-        for line in env_vars.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            key, _, value = line.partition("=")
-            parsed_env[key] = value
+    parsed_env = parse_env_text(env_vars)
     try:
         task_service.update(
             task_id,
