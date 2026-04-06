@@ -20,9 +20,10 @@ def client(app, db_session):
 
 
 def test_create_skill(client):
-    resp = client.post("/api/skills", json={
-        "name": "test", "description": "A test", "content": "# Test"
-    })
+    resp = client.post(
+        "/api/skills",
+        json={"name": "test", "description": "A test", "content": "# Test"},
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "test"
@@ -67,6 +68,7 @@ def test_delete_skill(client):
 
 def test_assign_skills_to_task(client, db_session):
     from app.crud import tasks as task_crud
+
     task = task_crud.create(db_session, name="T", prompt="p")
     create = client.post("/api/skills", json={"name": "s", "content": "c"})
     skill_id = create.json()["id"]

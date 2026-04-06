@@ -3,7 +3,7 @@ import json
 
 import pytest
 from unittest.mock import patch, MagicMock
-from app.runner import run_claude, validate_tools
+from app.runner import run_claude, validate_tools, _split_tool_patterns
 
 
 def _make_stream_lines(text="response", is_error=False):
@@ -225,9 +225,6 @@ def test_validate_tools_rejects_flag_mixed():
 
 
 # --- Tool pattern splitting tests ---
-
-
-from app.runner import _split_tool_patterns
 
 
 def test_split_tool_patterns_plain():

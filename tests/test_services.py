@@ -1,5 +1,5 @@
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -7,6 +7,8 @@ from app.crud import runs as run_crud
 from app.services import (
     TaskService,
     RunService,
+    SkillService,
+    SkillNotFoundError,
     TaskNotFoundError,
     RunNotFoundError,
     execute_task,
@@ -143,11 +145,18 @@ class TestExecuteTask:
         from app.crud import task_skills as task_skill_crud
 
         task = task_svc.create(name="T", prompt="p")
-        skill = skill_crud.create(db_session, name="jira", description="d", content="# Jira\nUse jira CLI")
+        skill = skill_crud.create(
+            db_session, name="jira", description="d", content="# Jira\nUse jira CLI"
+        )
         task_skill_crud.assign(db_session, task.id, skill.id)
 
         mock_runner = MagicMock(
-            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
+            return_value={
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
+            }
         )
         execute_task(task, db_session, runner=mock_runner)
         call_kwargs = mock_runner.call_args
@@ -175,10 +184,6 @@ class TestExecuteTaskBg:
         completed = run_crud.get(session, run.id)
         assert completed.status == "success"
         session.close()
-
-
-from unittest.mock import patch
-from app.services import SkillService, SkillNotFoundError
 
 
 class TestSkillService:
@@ -233,7 +238,9 @@ class TestSkillService:
     def test_list_global_case_insensitive(self, tmp_path, db_session):
         skill_dir = tmp_path / "skills" / "other"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "skill.md").write_text("---\nname: other\ndescription: d\n---\n# Body")
+        (skill_dir / "skill.md").write_text(
+            "---\nname: other\ndescription: d\n---\n# Body"
+        )
         svc = SkillService(db_session)
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
             skills = svc.list_global()
@@ -242,7 +249,9 @@ class TestSkillService:
     def test_list_all_merges(self, tmp_path, db_session):
         skill_dir = tmp_path / "skills" / "ext"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text("---\nname: ext\ndescription: External\n---\n# Ext")
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: ext\ndescription: External\n---\n# Ext"
+        )
         svc = SkillService(db_session)
         svc.create(name="local", description="d", content="c")
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):

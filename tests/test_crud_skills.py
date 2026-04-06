@@ -38,7 +38,9 @@ class TestSkillCrud:
         assert updated.description == "new desc"
 
     def test_delete_skill(self, db_session):
-        skill = skill_crud.create(db_session, name="doomed", description="d", content="c")
+        skill = skill_crud.create(
+            db_session, name="doomed", description="d", content="c"
+        )
         skill_crud.delete(db_session, skill.id)
         assert skill_crud.get(db_session, skill.id) is None
 

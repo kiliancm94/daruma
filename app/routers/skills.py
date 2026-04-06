@@ -31,9 +31,7 @@ def create_skill(
 
 
 @router.get("/skills/{skill_id}", response_model=SkillResponse)
-def get_skill(
-    skill_id: str, skill_service: SkillService = Depends(get_skill_service)
-):
+def get_skill(skill_id: str, skill_service: SkillService = Depends(get_skill_service)):
     try:
         return skill_service.get(skill_id)
     except SkillNotFoundError:

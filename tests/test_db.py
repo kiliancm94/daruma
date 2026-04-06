@@ -47,7 +47,15 @@ def test_runs_table_has_expected_columns(engine):
 def test_skills_table_has_expected_columns(engine):
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("skills")}
-    assert columns == {"id", "name", "description", "content", "source", "created_at", "updated_at"}
+    assert columns == {
+        "id",
+        "name",
+        "description",
+        "content",
+        "source",
+        "created_at",
+        "updated_at",
+    }
 
 
 def test_task_skills_table_has_expected_columns(engine):

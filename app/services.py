@@ -163,11 +163,13 @@ class SkillService:
             for candidate in ("SKILL.md", "skill.md"):
                 skill_file = skill_dir / candidate
                 if skill_file.exists():
-                    results.append({
-                        **_parse_skill_frontmatter(skill_file),
-                        "source": "global",
-                        "path": str(skill_file),
-                    })
+                    results.append(
+                        {
+                            **_parse_skill_frontmatter(skill_file),
+                            "source": "global",
+                            "path": str(skill_file),
+                        }
+                    )
                     break
         return results
 
