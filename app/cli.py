@@ -9,7 +9,7 @@ from rich.table import Table
 from app.config import DB_PATH
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
-from app.schemas.task import TaskResponse, OutputFormat
+from app.schemas.task import TaskResponse, OutputFormat, OutputDestination
 from app.schemas.run import RunResponse
 from app.services import (
     TaskService,
@@ -90,7 +90,7 @@ def list_tasks(as_json):
 @click.option(
     "--output-dest",
     default=None,
-    help="Where to write output: a file path, a folder path, or 'pipe' for task chaining",
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipe}' for task chaining",
 )
 def create_task(name, prompt, cron, tools, model, disabled, output_format, output_dest):
     """Create a new task."""
@@ -157,7 +157,7 @@ def show_task(task_id, as_json):
 @click.option(
     "--output-dest",
     default=None,
-    help="Where to write output: a file path, a folder path, or 'pipe' for task chaining",
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipe}' for task chaining",
 )
 def edit_task(
     task_id, name, prompt, cron, tools, model, enable, output_format, output_dest

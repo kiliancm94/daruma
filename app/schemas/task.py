@@ -11,6 +11,10 @@ class OutputFormat(StrEnum):
     md = "md"
 
 
+class OutputDestination(StrEnum):
+    pipe = "pipe"
+
+
 class TaskCreate(BaseModel):
     name: str
     prompt: str

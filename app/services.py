@@ -13,7 +13,7 @@ from app.crud import runs as run_crud
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
-from app.schemas.task import OutputFormat
+from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
 
 
@@ -133,7 +133,7 @@ def _write_output(stdout: str, task: Task, run_id: str) -> None:
     - "pipe": no file written; output is stored in Run.stdout for future task chaining
     """
     dest = task.output_destination
-    if not dest or dest == "pipe":
+    if not dest or dest == OutputDestination.pipe:
         return
 
     fmt = task.output_format or OutputFormat.text
