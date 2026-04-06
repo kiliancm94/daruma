@@ -12,7 +12,7 @@ class OutputFormat(StrEnum):
 
 
 class OutputDestination(StrEnum):
-    pipe = "pipe"
+    pipeline = "pipeline"
 
 
 class TaskCreate(BaseModel):

@@ -130,10 +130,10 @@ def _write_output(stdout: str, task: Task, run_id: str) -> None:
     Destination can be:
     - A file path: written directly (overwritten each run)
     - A directory path (ends with / or has no extension): timestamped file created inside
-    - "pipe": no file written; output is stored in Run.stdout for future task chaining
+    - "pipeline": no file written; output is stored in Run.stdout for future task chaining
     """
     dest = task.output_destination
-    if not dest or dest == OutputDestination.pipe:
+    if not dest or dest == OutputDestination.pipeline:
         return
 
     fmt = task.output_format or OutputFormat.text
