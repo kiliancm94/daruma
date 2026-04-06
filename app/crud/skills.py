@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.crud.exceptions import NotFoundError
 from app.models.skill import Skill
-from app.schemas.skill import SkillUpdate
+from app.schemas.skill import SkillSource, SkillUpdate
 from app.utils.date_helpers import utcnow
 
 
@@ -13,7 +13,7 @@ def create(
     name: str,
     description: str = "",
     content: str = "",
-    source: str = "local",
+    source: SkillSource = SkillSource.local,
 ) -> Skill:
     skill = Skill(name=name, description=description, content=content, source=source)
     session.add(skill)

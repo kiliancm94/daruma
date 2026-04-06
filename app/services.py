@@ -16,6 +16,7 @@ from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
 from app.models.skill import Skill
+from app.schemas.skill import SkillSource
 from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
 
@@ -166,7 +167,7 @@ class SkillService:
                     results.append(
                         {
                             **_parse_skill_frontmatter(skill_file),
-                            "source": "global",
+                            "source": SkillSource.global_,
                             "path": str(skill_file),
                         }
                     )
@@ -198,7 +199,7 @@ class SkillService:
                     name=global_skill["name"],
                     description=global_skill.get("description", ""),
                     content=global_skill["content"],
-                    source="global",
+                    source=SkillSource.global_,
                 )
                 created += 1
         return {"created": created, "updated": updated, "unchanged": unchanged}
