@@ -29,6 +29,15 @@
                 <span class="badge badge-dim">disabled</span>
             {% endif %}
         </div>
+        <div><span class="text-dim text-sm">Skills:</span>
+            {% if task_skills %}
+                {% for s in task_skills %}
+                    <span class="badge badge-dim">{{ s.name }}</span>
+                {% endfor %}
+            {% else %}
+                none
+            {% endif %}
+        </div>
     </div>
 </div>
 
