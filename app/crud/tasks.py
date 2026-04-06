@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
-from app.schemas.task import TaskUpdate
+from app.schemas.task import TaskUpdate, OutputFormat
 from app.utils.date_helpers import utcnow
 
 
@@ -16,7 +16,7 @@ def create(
     allowed_tools: str | None = None,
     model: str = "sonnet",
     enabled: bool = True,
-    output_format: str | None = None,
+    output_format: OutputFormat | None = None,
     output_destination: str | None = None,
 ) -> Task:
     task = Task(

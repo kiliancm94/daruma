@@ -13,6 +13,7 @@ from app.crud import runs as run_crud
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
+from app.schemas.task import OutputFormat
 from app.runner import run_claude, cancel_run
 
 
@@ -43,7 +44,7 @@ class TaskService:
         allowed_tools: str | None = None,
         model: str = "sonnet",
         enabled: bool = True,
-        output_format: str | None = None,
+        output_format: OutputFormat | None = None,
         output_destination: str | None = None,
     ) -> Task:
         return task_crud.create(
@@ -102,12 +103,12 @@ class RunService:
 
 # ── Output writing ─────────────────────────────────────────────────────────────
 
-_EXT = {"text": "txt", "json": "json", "md": "md"}
+_EXT = {OutputFormat.text: "txt", OutputFormat.json: "json", OutputFormat.md: "md"}
 
 
-def _format_output(stdout: str, fmt: str, task_name: str, run_id: str) -> str:
+def _format_output(stdout: str, fmt: OutputFormat, task_name: str, run_id: str) -> str:
     """Format run stdout according to the task's output_format."""
-    if fmt == "json":
+    if fmt == OutputFormat.json:
         return json.dumps(
             {
                 "task": task_name,
@@ -117,10 +118,10 @@ def _format_output(stdout: str, fmt: str, task_name: str, run_id: str) -> str:
             },
             indent=2,
         )
-    if fmt == "md":
+    if fmt == OutputFormat.md:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         return f"# {task_name}\n\n_Run {run_id[:8]} — {ts}_\n\n{stdout}\n"
-    return stdout  # "text" or None → raw
+    return stdout  # OutputFormat.text or None → raw
 
 
 def _write_output(stdout: str, task: Task, run_id: str) -> None:
@@ -135,7 +136,7 @@ def _write_output(stdout: str, task: Task, run_id: str) -> None:
     if not dest or dest == "pipe":
         return
 
-    fmt = task.output_format or "text"
+    fmt = task.output_format or OutputFormat.text
     content = _format_output(stdout, fmt, task.name, run_id)
     ext = _EXT.get(fmt, "txt")
 

@@ -11,10 +11,6 @@ class OutputFormat(StrEnum):
     md = "md"
 
 
-# Kept for click.Choice compatibility in cli.py
-VALID_OUTPUT_FORMATS = tuple(f.value for f in OutputFormat)
-
-
 class TaskCreate(BaseModel):
     name: str
     prompt: str

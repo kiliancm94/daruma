@@ -9,7 +9,7 @@ from rich.table import Table
 from app.config import DB_PATH
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
-from app.schemas.task import TaskResponse, VALID_OUTPUT_FORMATS
+from app.schemas.task import TaskResponse, OutputFormat
 from app.schemas.run import RunResponse
 from app.services import (
     TaskService,
@@ -83,7 +83,7 @@ def list_tasks(as_json):
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
 @click.option(
     "--output-format",
-    type=click.Choice(VALID_OUTPUT_FORMATS, case_sensitive=False),
+    type=click.Choice(list(OutputFormat), case_sensitive=False),
     default=None,
     help="Output format: text, json, or md",
 )
@@ -150,7 +150,7 @@ def show_task(task_id, as_json):
 @click.option("--enable/--disable", default=None)
 @click.option(
     "--output-format",
-    type=click.Choice(VALID_OUTPUT_FORMATS, case_sensitive=False),
+    type=click.Choice(list(OutputFormat), case_sensitive=False),
     default=None,
     help="Output format: text, json, or md",
 )
