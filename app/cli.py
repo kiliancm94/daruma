@@ -90,7 +90,7 @@ def list_tasks(as_json):
 @click.option(
     "--output-dest",
     default=None,
-    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipe}' for task chaining",
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
 )
 def create_task(name, prompt, cron, tools, model, disabled, output_format, output_dest):
     """Create a new task."""
@@ -157,7 +157,7 @@ def show_task(task_id, as_json):
 @click.option(
     "--output-dest",
     default=None,
-    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipe}' for task chaining",
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
 )
 def edit_task(
     task_id, name, prompt, cron, tools, model, enable, output_format, output_dest

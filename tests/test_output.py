@@ -47,7 +47,7 @@ class TestWriteOutput:
         _write_output("output", task, "run-1")  # should not raise
 
     def test_pipe_destination_does_nothing(self, tmp_path):
-        task = _make_task(output_format="text", output_destination="pipe")
+        task = _make_task(output_format="text", output_destination="pipeline")
         _write_output("output", task, "run-1")  # should not raise
 
     def test_writes_to_file_path(self, tmp_path):
@@ -172,5 +172,5 @@ class TestOutputFormatValidation:
     def test_pipe_destination_accepted(self):
         from app.schemas.task import TaskCreate
 
-        t = TaskCreate(name="x", prompt="p", output_destination="pipe")
-        assert t.output_destination == "pipe"
+        t = TaskCreate(name="x", prompt="p", output_destination="pipeline")
+        assert t.output_destination == "pipeline"
