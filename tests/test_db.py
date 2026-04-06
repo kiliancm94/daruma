@@ -21,6 +21,7 @@ def test_tasks_table_has_expected_columns(engine):
         "enabled",
         "output_format",
         "output_destination",
+        "env_vars",
         "created_at",
         "updated_at",
     }

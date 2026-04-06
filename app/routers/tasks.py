@@ -28,6 +28,7 @@ def create_task(
         allowed_tools=body.allowed_tools,
         model=body.model,
         enabled=body.enabled,
+        env_vars=body.env_vars,
     )
 
 

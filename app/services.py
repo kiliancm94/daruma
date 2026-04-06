@@ -58,6 +58,7 @@ class TaskService:
         enabled: bool = True,
         output_format: OutputFormat | None = None,
         output_destination: str | None = None,
+        env_vars: dict[str, str] | None = None,
     ) -> Task:
         return task_crud.create(
             self.session,
@@ -69,6 +70,7 @@ class TaskService:
             enabled=enabled,
             output_format=output_format,
             output_destination=output_destination,
+            env_vars=env_vars,
         )
 
     def get(self, task_id: str) -> Task:
@@ -311,6 +313,7 @@ def execute_task(
     try:
         skills = task_skill_crud.list_for_task(session, task.id)
         system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+        env_vars = json.loads(task.env_vars) if task.env_vars else None
 
         result = runner(
             task.prompt,
@@ -319,6 +322,7 @@ def execute_task(
             system_prompt=system_prompt,
             run_id=run_id,
             on_output=_combined,
+            env_vars=env_vars,
         )
         status = "success" if result["exit_code"] == 0 else "failed"
         completed = run_crud.complete(
@@ -378,6 +382,7 @@ def _background_worker(
     try:
         skills = task_skill_crud.list_for_task(session, task.id)
         system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+        env_vars = json.loads(task.env_vars) if task.env_vars else None
 
         result = runner(
             task.prompt,
@@ -388,6 +393,7 @@ def _background_worker(
             on_output=lambda stdout, activity: run_crud.update_output(
                 session, run_id, stdout, activity
             ),
+            env_vars=env_vars,
         )
         status = "success" if result["exit_code"] == 0 else "failed"
         run_crud.complete(

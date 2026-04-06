@@ -261,3 +261,28 @@ def test_run_claude_without_system_prompt(mock_popen):
     run_claude("Do stuff")
     cmd = mock_popen.call_args[0][0]
     assert "--append-system-prompt" not in cmd
+
+
+# --- Env vars tests ---
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_with_env_vars(mock_popen):
+    import os
+
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff", env_vars={"MY_TOKEN": "secret"})
+    call_kwargs = mock_popen.call_args[1]  # keyword args
+    assert "env" in call_kwargs
+    assert call_kwargs["env"]["MY_TOKEN"] == "secret"
+    # Parent env should be inherited too
+    assert call_kwargs["env"].get("PATH") == os.environ.get("PATH")
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_without_env_vars(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff")
+    call_kwargs = mock_popen.call_args[1]
+    # No env= kwarg means inherit parent env
+    assert "env" not in call_kwargs

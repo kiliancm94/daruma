@@ -1,5 +1,6 @@
 """UI router serving Jinja2 templates with HTMX interactions."""
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.crud import task_skills as task_skill_crud
+from app.utils.env_vars import parse_env_text
 from app.schemas.task import TaskResponse
 from app.schemas.run import RunResponse
 from app.services import (
@@ -70,6 +72,7 @@ def task_form_new(
             "all_skills": all_skills,
             "task_skill_ids": [],
             "task_skill_names": [],
+            "env_vars_text": "",
         },
     )
 
@@ -82,10 +85,12 @@ def task_create_form(
     allowed_tools: str = Form(""),
     model: str = Form("sonnet"),
     enabled: str = Form(""),
+    env_vars: str = Form(""),
     skill_ids: list[str] = Form(default=[]),
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
+    parsed_env = parse_env_text(env_vars)
     task = task_service.create(
         name=name,
         prompt=prompt,
@@ -93,6 +98,7 @@ def task_create_form(
         allowed_tools=allowed_tools or None,
         model=model,
         enabled=bool(enabled),
+        env_vars=parsed_env,
     )
     if skill_ids:
         task_skill_crud.replace(session, task.id, skill_ids)
@@ -113,10 +119,13 @@ def task_detail(
         raise HTTPException(404, "Task not found")
     runs = run_service.list(task_id=task_id)
     task_skills = task_skill_crud.list_for_task(session, task_id)
+    env_vars_keys: list[str] = []
+    if task.env_vars:
+        env_vars_keys = list(json.loads(task.env_vars).keys())
     return templates.TemplateResponse(
         request,
         "task_detail.html",
-        {"task": task, "runs": runs, "task_skills": task_skills},
+        {"task": task, "runs": runs, "task_skills": task_skills, "env_vars_keys": env_vars_keys},
     )
 
 
@@ -136,6 +145,10 @@ def task_edit_form(
     assigned = task_skill_crud.list_for_task(session, task_id)
     task_skill_ids = [s.id for s in assigned]
     task_skill_names = [s.name for s in assigned]
+    env_vars_text = ""
+    if task.env_vars:
+        env = json.loads(task.env_vars)
+        env_vars_text = "\n".join(f"{k}={v}" for k, v in env.items())
     return templates.TemplateResponse(
         request,
         "task_form.html",
@@ -144,6 +157,7 @@ def task_edit_form(
             "all_skills": all_skills,
             "task_skill_ids": task_skill_ids,
             "task_skill_names": task_skill_names,
+            "env_vars_text": env_vars_text,
         },
     )
 
@@ -157,10 +171,12 @@ def task_update_form(
     allowed_tools: str = Form(""),
     model: str = Form("sonnet"),
     enabled: str = Form(""),
+    env_vars: str = Form(""),
     skill_ids: list[str] = Form(default=[]),
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
+    parsed_env = parse_env_text(env_vars)
     try:
         task_service.update(
             task_id,
@@ -170,6 +186,7 @@ def task_update_form(
             allowed_tools=allowed_tools or None,
             model=model,
             enabled=bool(enabled),
+            env_vars=parsed_env,
         )
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")

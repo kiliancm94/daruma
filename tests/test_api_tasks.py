@@ -73,6 +73,16 @@ def test_update_task(client):
     assert resp.json()["name"] == "New"
 
 
+def test_create_task_with_env_vars(client):
+    resp = client.post(
+        "/api/tasks",
+        json={"name": "EnvAPI", "prompt": "p", "env_vars": {"SECRET": "val"}},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["env_vars"] == {"SECRET": "val"}
+
+
 def test_delete_task(client):
     create = client.post("/api/tasks", json={"name": "Gone", "prompt": "p"})
     task_id = create.json()["id"]

@@ -38,6 +38,15 @@
                 none
             {% endif %}
         </div>
+        <div><span class="text-dim text-sm">Env vars:</span>
+            {% if env_vars_keys %}
+                {% for k in env_vars_keys %}
+                    <span class="badge badge-dim">{{ k }}=***</span>
+                {% endfor %}
+            {% else %}
+                none
+            {% endif %}
+        </div>
     </div>
 </div>
 
