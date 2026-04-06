@@ -157,3 +157,81 @@ class TestExecuteTaskBg:
         completed = run_crud.get(session, run.id)
         assert completed.status == "success"
         session.close()
+
+
+from unittest.mock import patch
+from app.services import SkillService, SkillNotFoundError
+
+
+class TestSkillService:
+    def test_create(self, db_session):
+        svc = SkillService(db_session)
+        skill = svc.create(name="test", description="d", content="c")
+        assert skill.name == "test"
+        assert skill.source == "local"
+
+    def test_list_local(self, db_session):
+        svc = SkillService(db_session)
+        svc.create(name="a", description="d", content="c")
+        assert len(svc.list_local()) == 1
+
+    def test_get(self, db_session):
+        svc = SkillService(db_session)
+        skill = svc.create(name="x", description="d", content="c")
+        assert svc.get(skill.id).name == "x"
+
+    def test_get_not_found(self, db_session):
+        svc = SkillService(db_session)
+        with pytest.raises(SkillNotFoundError):
+            svc.get("nonexistent")
+
+    def test_update(self, db_session):
+        svc = SkillService(db_session)
+        skill = svc.create(name="old", description="d", content="c")
+        updated = svc.update(skill.id, description="new")
+        assert updated.description == "new"
+
+    def test_delete(self, db_session):
+        svc = SkillService(db_session)
+        skill = svc.create(name="gone", description="d", content="c")
+        svc.delete(skill.id)
+        with pytest.raises(SkillNotFoundError):
+            svc.get(skill.id)
+
+    def test_list_global(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: my-skill\ndescription: A skill\n---\n# Content"
+        )
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            skills = svc.list_global()
+        assert len(skills) == 1
+        assert skills[0]["name"] == "my-skill"
+        assert skills[0]["description"] == "A skill"
+        assert skills[0]["source"] == "global"
+
+    def test_list_global_case_insensitive(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "other"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "skill.md").write_text("---\nname: other\ndescription: d\n---\n# Body")
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            skills = svc.list_global()
+        assert len(skills) == 1
+
+    def test_list_all_merges(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "ext"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: ext\ndescription: External\n---\n# Ext")
+        svc = SkillService(db_session)
+        svc.create(name="local", description="d", content="c")
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            all_skills = svc.list_all()
+        assert len(all_skills) == 2
+
+    def test_list_global_no_dir(self, tmp_path, db_session):
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "nonexistent"):
+            assert svc.list_global() == []

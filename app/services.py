@@ -10,11 +10,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.crud import tasks as task_crud
 from app.crud import runs as run_crud
+from app.crud import skills as skill_crud
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
+from app.models.skill import Skill
 from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
+
+GLOBAL_SKILLS_DIR = Path.home() / ".claude" / "skills"
 
 
 class TaskNotFoundError(Exception):
@@ -27,6 +31,12 @@ class RunNotFoundError(Exception):
     def __init__(self, run_id: str):
         self.run_id = run_id
         super().__init__(f"Run not found: {run_id}")
+
+
+class SkillNotFoundError(Exception):
+    def __init__(self, skill_id: str):
+        self.skill_id = skill_id
+        super().__init__(f"Skill not found: {skill_id}")
 
 
 class TaskService:
@@ -99,6 +109,92 @@ class RunService:
 
     def last_run(self, task_id: str) -> Run | None:
         return run_crud.get_last(self.session, task_id)
+
+
+def _parse_skill_frontmatter(path: Path) -> dict:
+    """Parse name and description from SKILL.md frontmatter."""
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return {"name": path.parent.name, "description": "", "content": text}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {"name": path.parent.name, "description": "", "content": text}
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ":" in line:
+            key, _, val = line.partition(":")
+            meta[key.strip()] = val.strip().strip('"').strip("'")
+    return {
+        "name": meta.get("name", path.parent.name),
+        "description": meta.get("description", ""),
+        "content": text,
+    }
+
+
+class SkillService:
+    """Service layer for skill management (local DB + global filesystem)."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(self, name: str, description: str = "", content: str = "") -> Skill:
+        return skill_crud.create(
+            self.session, name=name, description=description, content=content
+        )
+
+    def get(self, skill_id: str) -> Skill:
+        skill = skill_crud.get(self.session, skill_id)
+        if not skill:
+            raise SkillNotFoundError(skill_id)
+        return skill
+
+    def list_local(self) -> list[Skill]:
+        return skill_crud.get_all(self.session)
+
+    def list_global(self) -> list[dict]:
+        """Discover skills from ~/.claude/skills/."""
+        results: list[dict] = []
+        if not GLOBAL_SKILLS_DIR.exists():
+            return results
+        for skill_dir in sorted(GLOBAL_SKILLS_DIR.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            for candidate in ("SKILL.md", "skill.md"):
+                skill_file = skill_dir / candidate
+                if skill_file.exists():
+                    results.append({
+                        **_parse_skill_frontmatter(skill_file),
+                        "source": "global",
+                        "path": str(skill_file),
+                    })
+                    break
+        return results
+
+    def list_all(self) -> list[dict]:
+        """Unified list: local DB skills + global filesystem skills."""
+        local = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "source": "local",
+                "content": s.content,
+            }
+            for s in self.list_local()
+        ]
+        return local + self.list_global()
+
+    def update(self, skill_id: str, **fields) -> Skill:
+        try:
+            return skill_crud.update(self.session, skill_id, **fields)
+        except NotFoundError:
+            raise SkillNotFoundError(skill_id)
+
+    def delete(self, skill_id: str) -> None:
+        try:
+            skill_crud.delete(self.session, skill_id)
+        except NotFoundError:
+            raise SkillNotFoundError(skill_id)
 
 
 # ── Output writing ─────────────────────────────────────────────────────────────
