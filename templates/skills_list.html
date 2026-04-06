@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Skills — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>Skills</h1>
+    <a href="/ui/skills/new" class="btn btn-primary btn-sm">New Skill</a>
+</div>
+<table>
+    <thead><tr><th>Name</th><th>Description</th><th>Source</th></tr></thead>
+    <tbody>
+        {% for skill in skills %}
+        <tr>
+            <td>
+                {% if skill.source == "local" %}
+                    <a href="/ui/skills/{{ skill.id }}">{{ skill.name }}</a>
+                {% else %}
+                    {{ skill.name }}
+                {% endif %}
+            </td>
+            <td class="text-dim text-sm">{{ skill.description }}</td>
+            <td><span class="badge {% if skill.source == 'global' %}badge-dim{% else %}badge-success{% endif %}">{{ skill.source }}</span></td>
+        </tr>
+        {% endfor %}
+        {% if not skills %}
+        <tr><td colspan="3" class="text-dim text-sm" style="text-align:center; padding:1rem;">No skills found.</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

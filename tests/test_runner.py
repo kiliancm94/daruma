@@ -3,7 +3,7 @@ import json
 
 import pytest
 from unittest.mock import patch, MagicMock
-from app.runner import run_claude, validate_tools
+from app.runner import run_claude, validate_tools, _split_tool_patterns
 
 
 def _make_stream_lines(text="response", is_error=False):
@@ -222,3 +222,42 @@ def test_validate_tools_rejects_unknown():
 def test_validate_tools_rejects_flag_mixed():
     with pytest.raises(ValueError, match="Invalid tool name"):
         validate_tools("Read,--dangerously-skip-permissions")
+
+
+# --- Tool pattern splitting tests ---
+
+
+def test_split_tool_patterns_plain():
+    tools, patterns = _split_tool_patterns("Bash,Read")
+    assert tools == "Bash,Read"
+    assert patterns == ""
+
+
+def test_split_tool_patterns_with_pattern():
+    tools, patterns = _split_tool_patterns("Bash(curl:*),Read")
+    assert tools == "Bash,Read"
+    assert patterns == "Bash(curl:*)"
+
+
+def test_split_tool_patterns_multiple_patterns():
+    tools, patterns = _split_tool_patterns("Bash(curl:*),Bash(git:*),Read")
+    assert tools == "Bash,Read"
+    assert patterns == "Bash(curl:*),Bash(git:*)"
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_with_system_prompt(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff", system_prompt="You are a Jira expert")
+    cmd = mock_popen.call_args[0][0]
+    assert "--append-system-prompt" in cmd
+    idx = cmd.index("--append-system-prompt")
+    assert cmd[idx + 1] == "You are a Jira expert"
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_without_system_prompt(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff")
+    cmd = mock_popen.call_args[0][0]
+    assert "--append-system-prompt" not in cmd

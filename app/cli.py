@@ -11,12 +11,16 @@ from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
 from app.schemas.task import TaskResponse, OutputFormat, OutputDestination
 from app.schemas.run import RunResponse
+from app.crud import skills as skill_crud
+from app.crud import task_skills as task_skill_crud
 from app.services import (
     TaskService,
     RunService,
+    SkillService,
     TaskNotFoundError,
     RunNotFoundError,
     execute_task,
+    _parse_skill_frontmatter,
 )
 
 console = Console()
@@ -147,6 +151,12 @@ def show_task(task_id, as_json):
     default=None,
     help="Claude model to use",
 )
+@click.option(
+    "--skills",
+    "skill_names",
+    default=None,
+    help="Comma-separated skill names to assign",
+)
 @click.option("--enable/--disable", default=None)
 @click.option(
     "--output-format",
@@ -160,12 +170,23 @@ def show_task(task_id, as_json):
     help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
 )
 def edit_task(
-    task_id, name, prompt, cron, tools, model, enable, output_format, output_dest
+    task_id,
+    name,
+    prompt,
+    cron,
+    tools,
+    model,
+    skill_names,
+    enable,
+    output_format,
+    output_dest,
 ):
     """Update a task."""
     session = _connect()
     task_service = TaskService(session)
     task = _resolve_task(task_service, task_id)
+    task_name = task.name
+    task_pk = task.id
     fields = {}
     if name is not None:
         fields["name"] = name
@@ -183,12 +204,24 @@ def edit_task(
         fields["output_format"] = output_format
     if output_dest is not None:
         fields["output_destination"] = output_dest
-    if not fields:
+    if not fields and skill_names is None:
         click.echo("Nothing to update.")
         return
-    updated = task_service.update(task.id, **fields)
+    if fields:
+        updated = task_service.update(task_pk, **fields)
+        task_name = updated.name
+    if skill_names is not None:
+        names = [n.strip() for n in skill_names.split(",") if n.strip()]
+        skill_ids = []
+        for sn in names:
+            sk = skill_crud.get_by_name(session, sn)
+            if not sk:
+                click.echo(f"Skill not found: {sn}", err=True)
+                raise SystemExit(1)
+            skill_ids.append(sk.id)
+        task_skill_crud.replace(session, task_pk, skill_ids)
     session.close()
-    click.echo(f"Updated task: {updated.name} ({updated.id[:8]})")
+    click.echo(f"Updated task: {task_name} ({task_pk[:8]})")
 
 
 @tasks.command("delete")
@@ -289,6 +322,129 @@ def show_run(run_id, as_json):
         click.echo(f"\n--- stdout ---\n{run.stdout}")
     if run.stderr:
         click.echo(f"\n--- stderr ---\n{run.stderr}")
+
+
+# ── Skills ─────────────────────────────────────────────
+
+
+@cli.group()
+def skills():
+    """Manage skills."""
+
+
+@skills.command("list")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    help="Include global skills from ~/.claude/skills/",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def list_skills(show_all, as_json):
+    """List skills."""
+    session = _connect()
+    skill_service = SkillService(session)
+    if show_all:
+        items = skill_service.list_all()
+    else:
+        items = [
+            {"name": s.name, "description": s.description, "source": s.source}
+            for s in skill_service.list_local()
+        ]
+    session.close()
+    if not items:
+        click.echo("No skills found.")
+        return
+    if as_json:
+        console.print_json(data=items)
+        return
+    table = Table(show_edge=False, pad_edge=False)
+    table.add_column("Name")
+    table.add_column("Description")
+    table.add_column("Source", style="dim")
+    for s in items:
+        table.add_row(s["name"], s.get("description", ""), s.get("source", "local"))
+    console.print(table)
+
+
+@skills.command("create")
+@click.option("--name", required=True, help="Skill name")
+@click.option("--description", default="", help="Short description")
+@click.option("--content", required=True, help="Skill content (markdown)")
+def create_skill(name, description, content):
+    """Create a new skill."""
+    session = _connect()
+    skill_service = SkillService(session)
+    skill_service.create(name=name, description=description, content=content)
+    session.close()
+    click.echo(f"Created skill: {name}")
+
+
+@skills.command("show")
+@click.argument("name")
+def show_skill(name):
+    """Show skill details and content."""
+    session = _connect()
+    skill = skill_crud.get_by_name(session, name)
+    if not skill:
+        click.echo(f"Skill not found: {name}", err=True)
+        session.close()
+        raise SystemExit(1)
+    click.echo(f"Name:        {skill.name}")
+    click.echo(f"Description: {skill.description}")
+    click.echo(f"Source:      {skill.source}")
+    click.echo(f"\n--- content ---\n{skill.content}")
+    session.close()
+
+
+@skills.command("delete")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def delete_skill(name, yes):
+    """Delete a skill."""
+    session = _connect()
+    skill = skill_crud.get_by_name(session, name)
+    if not skill:
+        click.echo(f"Skill not found: {name}", err=True)
+        session.close()
+        raise SystemExit(1)
+    if not yes:
+        click.confirm(f"Delete skill '{name}'?", abort=True)
+    skill_crud.delete(session, skill.id)
+    session.close()
+    click.echo(f"Deleted skill: {name}")
+
+
+@skills.command("import")
+@click.argument("file_path", type=click.Path(exists=True))
+def import_skill(file_path):
+    """Import a skill from a SKILL.md file."""
+    from pathlib import Path
+
+    parsed = _parse_skill_frontmatter(Path(file_path))
+    session = _connect()
+    skill_service = SkillService(session)
+    skill_service.create(
+        name=parsed["name"],
+        description=parsed.get("description", ""),
+        content=parsed["content"],
+    )
+    session.close()
+    click.echo(f"Imported skill: {parsed['name']}")
+
+
+@skills.command("sync")
+def sync_skills():
+    """Sync global skills from ~/.claude/skills/ into the database."""
+    session = _connect()
+    skill_service = SkillService(session)
+    result = skill_service.sync_global()
+    session.close()
+    click.echo(
+        f"Synced: {result['created']} created, "
+        f"{result['updated']} updated, "
+        f"{result['unchanged']} unchanged"
+    )
 
 
 # ── Run (execute) ─────────────────────────────────────

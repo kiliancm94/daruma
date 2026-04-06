@@ -182,3 +182,48 @@ class TestRunExecution:
         result = runner.invoke(cli, ["run", "nonexistent"])
         assert result.exit_code == 1
         assert "not found" in result.output
+
+
+class TestSkillCommands:
+    def test_list_empty(self, runner, mock_db):
+        result = runner.invoke(cli, ["skills", "list"])
+        assert result.exit_code == 0
+        assert "No skills" in result.output
+
+    def test_create_and_list(self, runner, mock_db):
+        result = runner.invoke(
+            cli, ["skills", "create", "--name", "test", "--content", "# Test skill"]
+        )
+        assert result.exit_code == 0
+        assert "Created skill: test" in result.output
+
+        result = runner.invoke(cli, ["skills", "list"])
+        assert "test" in result.output
+
+    def test_show(self, runner, mock_db):
+        runner.invoke(
+            cli, ["skills", "create", "--name", "s", "--content", "body text"]
+        )
+        result = runner.invoke(cli, ["skills", "show", "s"])
+        assert result.exit_code == 0
+        assert "body text" in result.output
+
+    def test_delete(self, runner, mock_db):
+        runner.invoke(cli, ["skills", "create", "--name", "d", "--content", "c"])
+        result = runner.invoke(cli, ["skills", "delete", "d", "-y"])
+        assert result.exit_code == 0
+        assert "Deleted skill: d" in result.output
+
+    def test_import_from_file(self, runner, mock_db, tmp_path):
+        f = tmp_path / "SKILL.md"
+        f.write_text("---\nname: imported\ndescription: From file\n---\n# Imported")
+        result = runner.invoke(cli, ["skills", "import", str(f)])
+        assert result.exit_code == 0
+        assert "Imported skill: imported" in result.output
+
+    def test_assign_to_task(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "T", "--prompt", "p"])
+        runner.invoke(cli, ["skills", "create", "--name", "s", "--content", "c"])
+        result = runner.invoke(cli, ["tasks", "edit", "T", "--skills", "s"])
+        assert result.exit_code == 0
+        assert "Updated task: T" in result.output

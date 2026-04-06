@@ -8,9 +8,10 @@ from app.config import DB_PATH
 from app.crud import tasks as task_crud
 from app.db import init_db, get_session, dispose
 from app.scheduler import create_scheduler, sync_jobs
-from app.services import execute_task
+from app.services import execute_task, SkillService
 from app.routers import tasks as tasks_router
 from app.routers import runs as runs_router
+from app.routers import skills as skills_router
 from app.routers import triggers as triggers_router
 from app.routers import ui as ui_router
 
@@ -38,10 +39,19 @@ def _refresh_scheduler() -> None:
             session.close()
 
 
+def _sync_global_skills() -> None:
+    session = get_session()
+    try:
+        SkillService(session).sync_global()
+    finally:
+        session.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _scheduler
     init_db(DB_PATH)
+    _sync_global_skills()
     _scheduler = create_scheduler()
     _refresh_scheduler()
     _scheduler.start()
@@ -54,6 +64,7 @@ app = FastAPI(title="Daruma — Claude Automations Runner", lifespan=lifespan)
 
 app.include_router(tasks_router.router)
 app.include_router(runs_router.router)
+app.include_router(skills_router.router)
 app.include_router(triggers_router.router)
 app.include_router(ui_router.router)
 

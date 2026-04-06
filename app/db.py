@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.models.base import Base  # noqa: F401 — ensure models are importable
 from app.models.task import Task  # noqa: F401 — register with Base.metadata
 from app.models.run import Run  # noqa: F401
+from app.models.skill import Skill  # noqa: F401
+from app.models.task_skill import TaskSkill  # noqa: F401
 
 _engine = None
 _SessionLocal: sessionmaker | None = None
