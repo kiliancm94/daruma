@@ -130,6 +130,73 @@ class TestTaskCommands:
         result = runner.invoke(cli, ["tasks", "list"])
         assert "No tasks" in result.output
 
+    def test_create_with_env_vars(self, runner, mock_db):
+        result = runner.invoke(
+            cli,
+            [
+                "tasks",
+                "create",
+                "--name",
+                "EnvTask",
+                "--prompt",
+                "p",
+                "--env",
+                "KEY=value1",
+                "--env",
+                "OTHER=val2",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Created task: EnvTask" in result.output
+
+    def test_show_with_env_vars(self, runner, mock_db):
+        runner.invoke(
+            cli,
+            [
+                "tasks",
+                "create",
+                "--name",
+                "EnvShow",
+                "--prompt",
+                "p",
+                "--env",
+                "SECRET=hidden",
+                "--env",
+                "TOKEN=abc123",
+            ],
+        )
+        result = runner.invoke(cli, ["tasks", "show", "EnvShow"])
+        assert result.exit_code == 0
+        assert "SECRET=***" in result.output
+        assert "TOKEN=***" in result.output
+        assert "hidden" not in result.output
+        assert "abc123" not in result.output
+
+    def test_show_without_env_vars(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "NoEnv", "--prompt", "p"])
+        result = runner.invoke(cli, ["tasks", "show", "NoEnv"])
+        assert result.exit_code == 0
+        assert "Env vars: none" in result.output
+
+    def test_edit_add_env_vars(self, runner, mock_db):
+        runner.invoke(cli, ["tasks", "create", "--name", "EditEnv", "--prompt", "p"])
+        result = runner.invoke(
+            cli,
+            ["tasks", "edit", "EditEnv", "--env", "NEW_KEY=new_val"],
+        )
+        assert result.exit_code == 0
+        assert "Updated task: EditEnv" in result.output
+        result = runner.invoke(cli, ["tasks", "show", "EditEnv"])
+        assert "NEW_KEY=***" in result.output
+
+    def test_create_invalid_env_var(self, runner, mock_db):
+        result = runner.invoke(
+            cli,
+            ["tasks", "create", "--name", "Bad", "--prompt", "p", "--env", "NOEQUALS"],
+        )
+        assert result.exit_code == 1
+        assert "Invalid env var" in result.output
+
     def test_show_not_found(self, runner, mock_db):
         result = runner.invoke(cli, ["tasks", "show", "nonexistent"])
         assert result.exit_code == 1

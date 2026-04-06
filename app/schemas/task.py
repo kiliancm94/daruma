@@ -1,8 +1,10 @@
 """Pydantic schemas for tasks — API and CLI input/output."""
 
+import json
+
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class OutputFormat(StrEnum):
@@ -24,6 +26,7 @@ class TaskCreate(BaseModel):
     enabled: bool = True
     output_format: OutputFormat | None = None
     output_destination: str | None = None
+    env_vars: dict[str, str] | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -35,6 +38,7 @@ class TaskUpdate(BaseModel):
     enabled: bool | None = None
     output_format: OutputFormat | None = None
     output_destination: str | None = None
+    env_vars: dict[str, str] | None = None
 
 
 class TaskResponse(BaseModel):
@@ -49,5 +53,14 @@ class TaskResponse(BaseModel):
     enabled: bool
     output_format: OutputFormat | None
     output_destination: str | None
+    env_vars: dict[str, str] | None
     created_at: str
     updated_at: str
+
+    @field_validator("env_vars", mode="before")
+    @classmethod
+    def parse_env_vars(cls, v: object) -> object:
+        """Deserialize JSON string from DB into a dict."""
+        if isinstance(v, str):
+            return json.loads(v)
+        return v

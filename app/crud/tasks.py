@@ -1,5 +1,7 @@
 """CRUD operations for tasks."""
 
+import json
+
 from sqlalchemy.orm import Session
 
 from app.crud.exceptions import NotFoundError
@@ -18,6 +20,7 @@ def create(
     enabled: bool = True,
     output_format: OutputFormat | None = None,
     output_destination: str | None = None,
+    env_vars: dict[str, str] | None = None,
 ) -> Task:
     task = Task(
         name=name,
@@ -28,6 +31,7 @@ def create(
         enabled=enabled,
         output_format=output_format,
         output_destination=output_destination,
+        env_vars=json.dumps(env_vars) if env_vars else None,
     )
     session.add(task)
     session.commit()
@@ -54,6 +58,8 @@ def update(session: Session, task_id: str, **fields) -> Task:
     validated = TaskUpdate(**fields).model_dump(exclude_unset=True)
     if not validated:
         return task
+    if "env_vars" in validated and validated["env_vars"] is not None:
+        validated["env_vars"] = json.dumps(validated["env_vars"])
     for key, value in validated.items():
         setattr(task, key, value)
     task.updated_at = utcnow()

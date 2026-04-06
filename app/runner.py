@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import threading
 import time
@@ -79,6 +80,7 @@ def run_claude(
     timeout: int = 300,
     run_id: str | None = None,
     on_output: Callable[[str], None] | None = None,
+    env_vars: dict[str, str] | None = None,
 ) -> dict:
     cmd = [
         "claude",
@@ -103,10 +105,12 @@ def run_claude(
     if system_prompt:
         cmd.extend(["--append-system-prompt", system_prompt])
 
+    popen_kwargs: dict = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if env_vars:
+        popen_kwargs["env"] = {**os.environ, **env_vars}
+
     try:
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        proc = subprocess.Popen(cmd, **popen_kwargs)
         if run_id:
             with _lock:
                 _active_processes[run_id] = proc

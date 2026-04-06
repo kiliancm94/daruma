@@ -1,5 +1,6 @@
 """Daruma CLI — manage and run Claude automation tasks."""
 
+import json
 import sys
 
 import click
@@ -96,8 +97,25 @@ def list_tasks(as_json):
     default=None,
     help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
 )
-def create_task(name, prompt, cron, tools, model, disabled, output_format, output_dest):
+@click.option(
+    "--env",
+    "env_pairs",
+    multiple=True,
+    help="Environment variable KEY=VALUE (repeatable)",
+)
+def create_task(
+    name, prompt, cron, tools, model, disabled, output_format, output_dest, env_pairs
+):
     """Create a new task."""
+    env_vars = None
+    if env_pairs:
+        env_vars = {}
+        for pair in env_pairs:
+            if "=" not in pair:
+                click.echo(f"Invalid env var (expected KEY=VALUE): {pair}", err=True)
+                raise SystemExit(1)
+            key, _, value = pair.partition("=")
+            env_vars[key] = value
     session = _connect()
     task_service = TaskService(session)
     task = task_service.create(
@@ -109,6 +127,7 @@ def create_task(name, prompt, cron, tools, model, disabled, output_format, outpu
         enabled=not disabled,
         output_format=output_format,
         output_destination=output_dest,
+        env_vars=env_vars,
     )
     session.close()
     click.echo(f"Created task: {task.name} ({task.id[:8]})")
@@ -135,6 +154,16 @@ def show_task(task_id, as_json):
     click.echo(f"Enabled: {task.enabled}")
     click.echo(f"Output format: {task.output_format or 'text (default)'}")
     click.echo(f"Output dest:   {task.output_destination or 'none'}")
+    if task.env_vars:
+        env = (
+            json.loads(task.env_vars)
+            if isinstance(task.env_vars, str)
+            else task.env_vars
+        )
+        masked = ", ".join(f"{k}=***" for k in env)
+        click.echo(f"Env vars: {masked}")
+    else:
+        click.echo("Env vars: none")
     click.echo(f"Created: {task.created_at}")
     click.echo(f"Updated: {task.updated_at}")
 
@@ -169,6 +198,12 @@ def show_task(task_id, as_json):
     default=None,
     help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
 )
+@click.option(
+    "--env",
+    "env_pairs",
+    multiple=True,
+    help="Environment variable KEY=VALUE (repeatable)",
+)
 def edit_task(
     task_id,
     name,
@@ -180,6 +215,7 @@ def edit_task(
     enable,
     output_format,
     output_dest,
+    env_pairs,
 ):
     """Update a task."""
     session = _connect()
@@ -204,6 +240,15 @@ def edit_task(
         fields["output_format"] = output_format
     if output_dest is not None:
         fields["output_destination"] = output_dest
+    if env_pairs is not None and len(env_pairs) > 0:
+        env_vars = {}
+        for pair in env_pairs:
+            if "=" not in pair:
+                click.echo(f"Invalid env var (expected KEY=VALUE): {pair}", err=True)
+                raise SystemExit(1)
+            key, _, value = pair.partition("=")
+            env_vars[key] = value
+        fields["env_vars"] = env_vars
     if not fields and skill_names is None:
         click.echo("Nothing to update.")
         return

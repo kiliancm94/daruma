@@ -140,6 +140,34 @@ class TestExecuteTask:
         execute_task(task, db_session, runner=mock_runner, on_output=capture)
         mock_runner.assert_called_once()
 
+    def test_env_vars_passed_to_runner(self, task_svc, db_session):
+        task = task_svc.create(name="T", prompt="p", env_vars={"MY_SECRET": "abc123"})
+        mock_runner = MagicMock(
+            return_value={
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
+            }
+        )
+        execute_task(task, db_session, runner=mock_runner)
+        call_kwargs = mock_runner.call_args.kwargs
+        assert call_kwargs["env_vars"] == {"MY_SECRET": "abc123"}
+
+    def test_no_env_vars_passes_none(self, task_svc, db_session):
+        task = task_svc.create(name="T", prompt="p")
+        mock_runner = MagicMock(
+            return_value={
+                "exit_code": 0,
+                "stdout": "done",
+                "stderr": "",
+                "activity": "",
+            }
+        )
+        execute_task(task, db_session, runner=mock_runner)
+        call_kwargs = mock_runner.call_args.kwargs
+        assert call_kwargs.get("env_vars") is None
+
     def test_skills_injected(self, task_svc, db_session):
         from app.crud import skills as skill_crud
         from app.crud import task_skills as task_skill_crud

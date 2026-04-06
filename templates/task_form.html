@@ -32,6 +32,10 @@
         </select>
     </div>
     <div class="form-group">
+        <label for="env_vars">Environment Variables <span class="text-dim">(one KEY=VALUE per line)</span></label>
+        <textarea id="env_vars" name="env_vars" rows="3" placeholder="API_KEY=secret&#10;TOKEN=abc123">{{ env_vars_text if env_vars_text else '' }}</textarea>
+    </div>
+    <div class="form-group">
         <label>Skills</label>
         <div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; padding:0.5rem;">
             {% for skill in all_skills %}

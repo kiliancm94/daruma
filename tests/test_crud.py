@@ -98,6 +98,30 @@ class TestTaskCrud:
         assert updated.output_format == "json"
         assert updated.output_destination == "/tmp/out.json"
 
+    def test_create_task_with_env_vars(self, db_session):
+        import json
+
+        task = task_crud.create(
+            db_session,
+            name="T",
+            prompt="p",
+            env_vars={"API_KEY": "secret123"},
+        )
+        assert task.env_vars is not None
+        assert json.loads(task.env_vars) == {"API_KEY": "secret123"}
+
+    def test_update_task_env_vars(self, db_session):
+        import json
+
+        task = task_crud.create(db_session, name="T", prompt="p")
+        assert task.env_vars is None
+        updated = task_crud.update(
+            db_session,
+            task.id,
+            env_vars={"TOKEN": "abc"},
+        )
+        assert json.loads(updated.env_vars) == {"TOKEN": "abc"}
+
 
 class TestRunCrud:
     def _make_task(self, db_session):
