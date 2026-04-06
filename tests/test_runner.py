@@ -224,6 +224,30 @@ def test_validate_tools_rejects_flag_mixed():
         validate_tools("Read,--dangerously-skip-permissions")
 
 
+# --- Tool pattern splitting tests ---
+
+
+from app.runner import _split_tool_patterns
+
+
+def test_split_tool_patterns_plain():
+    tools, patterns = _split_tool_patterns("Bash,Read")
+    assert tools == "Bash,Read"
+    assert patterns == ""
+
+
+def test_split_tool_patterns_with_pattern():
+    tools, patterns = _split_tool_patterns("Bash(curl:*),Read")
+    assert tools == "Bash,Read"
+    assert patterns == "Bash(curl:*)"
+
+
+def test_split_tool_patterns_multiple_patterns():
+    tools, patterns = _split_tool_patterns("Bash(curl:*),Bash(git:*),Read")
+    assert tools == "Bash,Read"
+    assert patterns == "Bash(curl:*),Bash(git:*)"
+
+
 @patch("app.runner.subprocess.Popen")
 def test_run_claude_with_system_prompt(mock_popen):
     mock_popen.return_value = _make_popen_mock()
