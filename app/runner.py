@@ -51,10 +51,31 @@ def validate_tools(tools_str: str) -> str:
     return ",".join(normalized)
 
 
+def _split_tool_patterns(tools_str: str) -> tuple[str, str]:
+    """Split a tools string into plain tool names and pattern-based permissions.
+
+    Returns (tools, allowed_patterns) where:
+    - tools: comma-separated base names for --tools (e.g. "Bash,Read")
+    - allowed_patterns: comma-separated patterns for --allowedTools (e.g. "Bash(curl:*)")
+    """
+    base_names: set[str] = set()
+    patterns: list[str] = []
+    for t in tools_str.split(","):
+        t = t.strip()
+        if not t:
+            continue
+        base = t.split("(")[0]
+        base_names.add(base)
+        if "(" in t:
+            patterns.append(t)
+    return ",".join(sorted(base_names)), ",".join(patterns)
+
+
 def run_claude(
     prompt: str,
     allowed_tools: str | None = None,
     model: str = DEFAULT_MODEL,
+    system_prompt: str | None = None,
     timeout: int = 300,
     run_id: str | None = None,
     on_output: Callable[[str], None] | None = None,
@@ -73,7 +94,14 @@ def run_claude(
     ]
     if allowed_tools:
         validated = validate_tools(allowed_tools)
-        cmd.extend(["--tools", validated])
+        tools, patterns = _split_tool_patterns(validated)
+        if tools:
+            cmd.extend(["--tools", tools])
+        if patterns:
+            cmd.extend(["--allowedTools", patterns])
+
+    if system_prompt:
+        cmd.extend(["--append-system-prompt", system_prompt])
 
     try:
         proc = subprocess.Popen(

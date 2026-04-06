@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.crud import tasks as task_crud
 from app.crud import runs as run_crud
 from app.crud import skills as skill_crud
+from app.crud import task_skills as task_skill_crud
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
@@ -276,10 +277,14 @@ def execute_task(
             run_crud.update_output(session, run_id, stdout, activity)
 
     try:
+        skills = task_skill_crud.list_for_task(session, task.id)
+        system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+
         result = runner(
             task.prompt,
             allowed_tools=task.allowed_tools,
             model=task.model,
+            system_prompt=system_prompt,
             run_id=run_id,
             on_output=_combined,
         )
@@ -339,10 +344,14 @@ def _background_worker(
 ) -> None:
     session = session_factory()
     try:
+        skills = task_skill_crud.list_for_task(session, task.id)
+        system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+
         result = runner(
             task.prompt,
             allowed_tools=task.allowed_tools,
             model=task.model,
+            system_prompt=system_prompt,
             run_id=run_id,
             on_output=lambda stdout, activity: run_crud.update_output(
                 session, run_id, stdout, activity

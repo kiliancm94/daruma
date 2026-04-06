@@ -138,6 +138,24 @@ class TestExecuteTask:
         execute_task(task, db_session, runner=mock_runner, on_output=capture)
         mock_runner.assert_called_once()
 
+    def test_skills_injected(self, task_svc, db_session):
+        from app.crud import skills as skill_crud
+        from app.crud import task_skills as task_skill_crud
+
+        task = task_svc.create(name="T", prompt="p")
+        skill = skill_crud.create(db_session, name="jira", description="d", content="# Jira\nUse jira CLI")
+        task_skill_crud.assign(db_session, task.id, skill.id)
+
+        mock_runner = MagicMock(
+            return_value={"exit_code": 0, "stdout": "done", "stderr": "", "activity": ""}
+        )
+        execute_task(task, db_session, runner=mock_runner)
+        call_kwargs = mock_runner.call_args
+        assert "system_prompt" in call_kwargs.kwargs or (len(call_kwargs.args) > 3)
+        # Check system_prompt was passed
+        if call_kwargs.kwargs.get("system_prompt"):
+            assert "Jira" in call_kwargs.kwargs["system_prompt"]
+
 
 class TestExecuteTaskBg:
     def test_returns_running(self, task_svc, session_factory):

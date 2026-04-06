@@ -222,3 +222,21 @@ def test_validate_tools_rejects_unknown():
 def test_validate_tools_rejects_flag_mixed():
     with pytest.raises(ValueError, match="Invalid tool name"):
         validate_tools("Read,--dangerously-skip-permissions")
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_with_system_prompt(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff", system_prompt="You are a Jira expert")
+    cmd = mock_popen.call_args[0][0]
+    assert "--append-system-prompt" in cmd
+    idx = cmd.index("--append-system-prompt")
+    assert cmd[idx + 1] == "You are a Jira expert"
+
+
+@patch("app.runner.subprocess.Popen")
+def test_run_claude_without_system_prompt(mock_popen):
+    mock_popen.return_value = _make_popen_mock()
+    run_claude("Do stuff")
+    cmd = mock_popen.call_args[0][0]
+    assert "--append-system-prompt" not in cmd
