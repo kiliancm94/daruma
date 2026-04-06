@@ -294,3 +294,146 @@ class TestSkillCommands:
         result = runner.invoke(cli, ["tasks", "edit", "T", "--skills", "s"])
         assert result.exit_code == 0
         assert "Updated task: T" in result.output
+
+
+class TestPipelineCommands:
+    def _create_task(self, runner, name="Task A", prompt="Do A"):
+        runner.invoke(cli, ["tasks", "create", "--name", name, "--prompt", prompt])
+
+    def test_pipelines_list_empty(self, runner, mock_db):
+        result = runner.invoke(cli, ["pipelines", "list"])
+        assert result.exit_code == 0
+        assert "No pipelines" in result.output
+
+    def test_pipelines_list(self, runner, mock_db):
+        self._create_task(runner, "Step1", "p1")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "My Pipe", "--steps", "Step1"],
+        )
+        result = runner.invoke(cli, ["pipelines", "list"])
+        assert result.exit_code == 0
+        assert "My Pipe" in result.output
+
+    def test_pipelines_create(self, runner, mock_db):
+        self._create_task(runner, "Alpha", "do alpha")
+        self._create_task(runner, "Beta", "do beta")
+        result = runner.invoke(
+            cli,
+            [
+                "pipelines",
+                "create",
+                "--name",
+                "Two Step",
+                "--steps",
+                "Alpha,Beta",
+                "--description",
+                "A two-step pipeline",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Created pipeline: Two Step" in result.output
+
+    def test_pipelines_create_invalid_task(self, runner, mock_db):
+        result = runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "Bad", "--steps", "NonExistent"],
+        )
+        assert result.exit_code == 1
+        assert "Task not found" in result.output
+
+    def test_pipelines_show(self, runner, mock_db):
+        self._create_task(runner, "ShowTask", "p")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "ShowPipe", "--steps", "ShowTask"],
+        )
+        result = runner.invoke(cli, ["pipelines", "show", "ShowPipe"])
+        assert result.exit_code == 0
+        assert "Name:        ShowPipe" in result.output
+        assert "1. ShowTask" in result.output
+
+    def test_pipelines_show_json(self, runner, mock_db):
+        self._create_task(runner, "JTask", "p")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "JPipe", "--steps", "JTask"],
+        )
+        result = runner.invoke(cli, ["pipelines", "show", "JPipe", "--json"])
+        assert result.exit_code == 0
+        assert '"name"' in result.output
+        assert "JPipe" in result.output
+
+    def test_pipelines_edit(self, runner, mock_db):
+        self._create_task(runner, "EditTask", "p")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "EditPipe", "--steps", "EditTask"],
+        )
+        result = runner.invoke(
+            cli, ["pipelines", "edit", "EditPipe", "--name", "Renamed"]
+        )
+        assert result.exit_code == 0
+        assert "Updated pipeline: Renamed" in result.output
+
+    def test_pipelines_edit_steps(self, runner, mock_db):
+        self._create_task(runner, "X", "px")
+        self._create_task(runner, "Y", "py")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "StepPipe", "--steps", "X"],
+        )
+        result = runner.invoke(cli, ["pipelines", "edit", "StepPipe", "--steps", "Y,X"])
+        assert result.exit_code == 0
+        assert "Updated pipeline: StepPipe" in result.output
+
+    def test_pipelines_delete(self, runner, mock_db):
+        self._create_task(runner, "DelTask", "p")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "DelPipe", "--steps", "DelTask"],
+        )
+        result = runner.invoke(cli, ["pipelines", "delete", "DelPipe", "-y"])
+        assert result.exit_code == 0
+        assert "Deleted pipeline: DelPipe" in result.output
+        result = runner.invoke(cli, ["pipelines", "list"])
+        assert "No pipelines" in result.output
+
+    def test_pipelines_run(self, runner, mock_db):
+        self._create_task(runner, "RunTask", "do run")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "RunPipe", "--steps", "RunTask"],
+        )
+        with patch("app.services.run_claude") as mock_claude:
+            mock_claude.return_value = {
+                "exit_code": 0,
+                "stdout": "Step output",
+                "stderr": "",
+                "activity": "",
+            }
+            result = runner.invoke(cli, ["pipelines", "run", "RunPipe"])
+            assert result.exit_code == 0
+            assert "Pipeline: success" in result.output
+
+    def test_pipelines_run_failure(self, runner, mock_db):
+        self._create_task(runner, "FailTask", "fail")
+        runner.invoke(
+            cli,
+            ["pipelines", "create", "--name", "FailPipe", "--steps", "FailTask"],
+        )
+        with patch("app.services.run_claude") as mock_claude:
+            mock_claude.return_value = {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "error",
+                "activity": "",
+            }
+            result = runner.invoke(cli, ["pipelines", "run", "FailPipe"])
+            assert result.exit_code == 1
+            assert "Pipeline: failed" in result.output
+
+    def test_pipelines_not_found(self, runner, mock_db):
+        result = runner.invoke(cli, ["pipelines", "show", "nope"])
+        assert result.exit_code == 1
+        assert "Pipeline not found" in result.output

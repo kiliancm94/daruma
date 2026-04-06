@@ -12,10 +12,14 @@ from app.crud import tasks as task_crud
 from app.crud import runs as run_crud
 from app.crud import skills as skill_crud
 from app.crud import task_skills as task_skill_crud
+from app.crud import pipelines as pipeline_crud
+from app.crud import pipeline_runs as pipeline_run_crud
 from app.crud.exceptions import NotFoundError
 from app.models.task import Task
 from app.models.run import Run
 from app.models.skill import Skill
+from app.models.pipeline import Pipeline
+from app.models.pipeline_run import PipelineRun
 from app.schemas.skill import SkillSource
 from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
@@ -39,6 +43,18 @@ class SkillNotFoundError(Exception):
     def __init__(self, skill_id: str):
         self.skill_id = skill_id
         super().__init__(f"Skill not found: {skill_id}")
+
+
+class PipelineNotFoundError(Exception):
+    def __init__(self, pipeline_id: str):
+        self.pipeline_id = pipeline_id
+        super().__init__(f"Pipeline not found: {pipeline_id}")
+
+
+class PipelineRunNotFoundError(Exception):
+    def __init__(self, run_id: str):
+        self.run_id = run_id
+        super().__init__(f"Pipeline run not found: {run_id}")
 
 
 class TaskService:
@@ -230,6 +246,80 @@ class SkillService:
             skill_crud.delete(self.session, skill_id)
         except NotFoundError:
             raise SkillNotFoundError(skill_id)
+
+
+class PipelineService:
+    """Service layer for pipeline management."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def list(self) -> list[Pipeline]:
+        return pipeline_crud.get_all(self.session)
+
+    def create(
+        self,
+        name: str,
+        description: str | None = None,
+        task_ids: list[str] | None = None,
+        enabled: bool = True,
+    ) -> Pipeline:
+        return pipeline_crud.create(
+            self.session,
+            name=name,
+            description=description,
+            task_ids=task_ids,
+            enabled=enabled,
+        )
+
+    def get(self, pipeline_id: str) -> Pipeline:
+        pipeline = pipeline_crud.get(self.session, pipeline_id)
+        if not pipeline:
+            raise PipelineNotFoundError(pipeline_id)
+        return pipeline
+
+    def get_by_name(self, name: str) -> Pipeline:
+        pipeline = pipeline_crud.get_by_name(self.session, name)
+        if not pipeline:
+            raise PipelineNotFoundError(name)
+        return pipeline
+
+    def update(self, pipeline_id: str, **fields) -> Pipeline:
+        try:
+            return pipeline_crud.update(self.session, pipeline_id, **fields)
+        except NotFoundError:
+            raise PipelineNotFoundError(pipeline_id)
+
+    def update_steps(self, pipeline_id: str, task_ids: list[str]) -> None:
+        try:
+            pipeline_crud.update_steps(self.session, pipeline_id, task_ids)
+        except NotFoundError:
+            raise PipelineNotFoundError(pipeline_id)
+
+    def delete(self, pipeline_id: str) -> None:
+        try:
+            pipeline_crud.delete(self.session, pipeline_id)
+        except NotFoundError:
+            raise PipelineNotFoundError(pipeline_id)
+
+
+class PipelineRunService:
+    """Service layer for pipeline run queries."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def list(self, pipeline_id: str | None = None) -> list[PipelineRun]:
+        return pipeline_run_crud.get_all(self.session, pipeline_id=pipeline_id)
+
+    def get(self, run_id: str) -> PipelineRun:
+        run = pipeline_run_crud.get(self.session, run_id)
+        if not run:
+            raise PipelineRunNotFoundError(run_id)
+        return run
+
+    def last_run(self, pipeline_id: str) -> PipelineRun | None:
+        return pipeline_run_crud.get_last(self.session, pipeline_id)
 
 
 # ── Output writing ─────────────────────────────────────────────────────────────
@@ -432,3 +522,206 @@ def cancel_task_run(run_id: str, session: Session) -> None:
             stderr="Cancelled",
             exit_code=-1,
         )
+
+
+# ── Pipeline execution ────────────────────────────────────────────────────────
+
+
+def execute_pipeline(
+    pipeline: Pipeline,
+    session: Session,
+    trigger: str = "manual",
+    runner: Callable | None = None,
+) -> PipelineRun:
+    """Execute all steps of a pipeline sequentially. Returns the completed PipelineRun."""
+    if runner is None:
+        runner = run_claude
+
+    pipeline_run = pipeline_run_crud.create(
+        session, pipeline_id=pipeline.id, trigger=trigger
+    )
+
+    steps = sorted(pipeline.steps, key=lambda s: s.step_order)
+    previous_stdout: str | None = None
+
+    for step in steps:
+        task = step.task
+
+        # Build prompt — step 0 uses task prompt as-is; later steps prepend previous output
+        if previous_stdout is not None:
+            prompt = f"Output from previous step:\n\n{previous_stdout}\n\n---\n\n{task.prompt}"
+        else:
+            prompt = task.prompt
+
+        # Create a Run record linked to the pipeline run
+        run = run_crud.create(
+            session,
+            task_id=task.id,
+            trigger=trigger,
+            pipeline_run_id=pipeline_run.id,
+        )
+        run_id = run.id
+
+        try:
+            skills = task_skill_crud.list_for_task(session, task.id)
+            system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+            env_vars = json.loads(task.env_vars) if task.env_vars else None
+
+            result = runner(
+                prompt,
+                allowed_tools=task.allowed_tools,
+                model=task.model,
+                system_prompt=system_prompt,
+                run_id=run_id,
+                on_output=lambda stdout, activity: run_crud.update_output(
+                    session, run_id, stdout, activity
+                ),
+                env_vars=env_vars,
+            )
+            status = "success" if result["exit_code"] == 0 else "failed"
+            run_crud.complete(
+                session,
+                run_id,
+                status=status,
+                stdout=result["stdout"],
+                stderr=result["stderr"],
+                exit_code=result["exit_code"],
+                activity=result.get("activity", ""),
+            )
+        except Exception as e:
+            run_crud.complete(
+                session,
+                run_id,
+                status="failed",
+                stdout="",
+                stderr=str(e),
+                exit_code=-1,
+            )
+            status = "failed"
+
+        # Update current step on pipeline run
+        pipeline_run_crud.update_step(session, pipeline_run.id, step.step_order)
+
+        if status == "failed":
+            return pipeline_run_crud.complete(session, pipeline_run.id, status="failed")
+
+        # Store stdout for the next step
+        previous_stdout = result["stdout"]
+
+    return pipeline_run_crud.complete(session, pipeline_run.id, status="success")
+
+
+def execute_pipeline_background(
+    pipeline: Pipeline,
+    session_factory: sessionmaker,
+    trigger: str = "manual",
+    runner: Callable | None = None,
+) -> PipelineRun:
+    """Execute a pipeline in a background thread. Returns the initial PipelineRun (status=running)."""
+    if runner is None:
+        runner = run_claude
+    session = session_factory()
+    try:
+        pipeline_run = pipeline_run_crud.create(
+            session, pipeline_id=pipeline.id, trigger=trigger
+        )
+        session.expunge(pipeline_run)
+    finally:
+        session.close()
+
+    threading.Thread(
+        target=_pipeline_background_worker,
+        args=(pipeline, pipeline_run.id, runner, session_factory),
+        daemon=True,
+    ).start()
+    return pipeline_run
+
+
+def _pipeline_background_worker(
+    pipeline: Pipeline,
+    pipeline_run_id: str,
+    runner: Callable,
+    session_factory: sessionmaker,
+) -> None:
+    """Background worker that executes all pipeline steps sequentially."""
+    session = session_factory()
+    try:
+        # Re-load pipeline within this session
+        fresh_pipeline = pipeline_crud.get(session, pipeline.id)
+        if not fresh_pipeline:
+            pipeline_run_crud.complete(session, pipeline_run_id, status="failed")
+            return
+
+        steps = sorted(fresh_pipeline.steps, key=lambda s: s.step_order)
+        previous_stdout: str | None = None
+
+        for step in steps:
+            task = step.task
+            if previous_stdout is not None:
+                prompt = f"Output from previous step:\n\n{previous_stdout}\n\n---\n\n{task.prompt}"
+            else:
+                prompt = task.prompt
+
+            run = run_crud.create(
+                session,
+                task_id=task.id,
+                trigger="pipeline",
+                pipeline_run_id=pipeline_run_id,
+            )
+            run_id = run.id
+
+            try:
+                skills = task_skill_crud.list_for_task(session, task.id)
+                system_prompt = (
+                    "\n\n".join(s.content for s in skills) if skills else None
+                )
+                env_vars = json.loads(task.env_vars) if task.env_vars else None
+
+                result = runner(
+                    prompt,
+                    allowed_tools=task.allowed_tools,
+                    model=task.model,
+                    system_prompt=system_prompt,
+                    run_id=run_id,
+                    on_output=lambda stdout, activity: run_crud.update_output(
+                        session, run_id, stdout, activity
+                    ),
+                    env_vars=env_vars,
+                )
+                status = "success" if result["exit_code"] == 0 else "failed"
+                run_crud.complete(
+                    session,
+                    run_id,
+                    status=status,
+                    stdout=result["stdout"],
+                    stderr=result["stderr"],
+                    exit_code=result["exit_code"],
+                    activity=result.get("activity", ""),
+                )
+            except Exception as e:
+                run_crud.complete(
+                    session,
+                    run_id,
+                    status="failed",
+                    stdout="",
+                    stderr=str(e),
+                    exit_code=-1,
+                )
+                status = "failed"
+
+            pipeline_run_crud.update_step(session, pipeline_run_id, step.step_order)
+
+            if status == "failed":
+                pipeline_run_crud.complete(session, pipeline_run_id, status="failed")
+                return
+
+            previous_stdout = result["stdout"]
+
+        pipeline_run_crud.complete(session, pipeline_run_id, status="success")
+    except Exception:
+        try:
+            pipeline_run_crud.complete(session, pipeline_run_id, status="failed")
+        except Exception:
+            pass
+    finally:
+        session.close()

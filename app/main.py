@@ -13,6 +13,8 @@ from app.routers import tasks as tasks_router
 from app.routers import runs as runs_router
 from app.routers import skills as skills_router
 from app.routers import triggers as triggers_router
+from app.routers import pipelines as pipelines_router
+from app.routers import pipeline_triggers as pipeline_triggers_router
 from app.routers import ui as ui_router
 
 _scheduler = None
@@ -66,6 +68,8 @@ app.include_router(tasks_router.router)
 app.include_router(runs_router.router)
 app.include_router(skills_router.router)
 app.include_router(triggers_router.router)
+app.include_router(pipelines_router.router)
+app.include_router(pipeline_triggers_router.router)
 app.include_router(ui_router.router)
 
 static_dir = Path(__file__).parent.parent / "static"

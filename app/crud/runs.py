@@ -9,8 +9,13 @@ from app.models.run import Run
 from app.utils.date_helpers import utcnow
 
 
-def create(session: Session, task_id: str, trigger: str) -> Run:
-    run = Run(task_id=task_id, trigger=trigger)
+def create(
+    session: Session,
+    task_id: str,
+    trigger: str,
+    pipeline_run_id: str | None = None,
+) -> Run:
+    run = Run(task_id=task_id, trigger=trigger, pipeline_run_id=pipeline_run_id)
     session.add(run)
     session.commit()
     session.refresh(run)

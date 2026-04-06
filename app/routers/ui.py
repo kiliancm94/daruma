@@ -17,9 +17,13 @@ from app.services import (
     TaskService,
     RunService,
     SkillService,
+    PipelineService,
+    PipelineRunService,
     TaskNotFoundError,
     RunNotFoundError,
     SkillNotFoundError,
+    PipelineNotFoundError,
+    PipelineRunNotFoundError,
 )
 
 router = APIRouter(prefix="/ui", tags=["ui"])
@@ -38,6 +42,16 @@ def get_run_service(session: Session = Depends(get_db)) -> RunService:
 
 def get_skill_service(session: Session = Depends(get_db)) -> SkillService:
     return SkillService(session)
+
+
+def get_pipeline_service(session: Session = Depends(get_db)) -> PipelineService:
+    return PipelineService(session)
+
+
+def get_pipeline_run_service(
+    session: Session = Depends(get_db),
+) -> PipelineRunService:
+    return PipelineRunService(session)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -125,7 +139,12 @@ def task_detail(
     return templates.TemplateResponse(
         request,
         "task_detail.html",
-        {"task": task, "runs": runs, "task_skills": task_skills, "env_vars_keys": env_vars_keys},
+        {
+            "task": task,
+            "runs": runs,
+            "task_skills": task_skills,
+            "env_vars_keys": env_vars_keys,
+        },
     )
 
 
@@ -270,6 +289,162 @@ def skill_update_form(
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
     return RedirectResponse(f"/ui/skills/{skill_id}", status_code=303)
+
+
+# ── Pipelines UI ──────────────────────────────────────
+
+
+@router.get("/pipelines/", response_class=HTMLResponse)
+def pipelines_list(
+    request: Request,
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+    pipeline_run_service: PipelineRunService = Depends(get_pipeline_run_service),
+):
+    pipelines = pipeline_service.list()
+    pipeline_data = []
+    for pipeline in pipelines:
+        d = {
+            "id": pipeline.id,
+            "name": pipeline.name,
+            "description": pipeline.description,
+            "enabled": pipeline.enabled,
+            "steps_count": len(pipeline.steps),
+        }
+        last_run = pipeline_run_service.last_run(pipeline.id)
+        d["last_run"] = (
+            {
+                "status": last_run.status,
+                "duration_ms": last_run.duration_ms,
+            }
+            if last_run
+            else None
+        )
+        pipeline_data.append(d)
+    return templates.TemplateResponse(
+        request, "pipelines_list.html", {"pipelines": pipeline_data}
+    )
+
+
+@router.get("/pipelines/new", response_class=HTMLResponse)
+def pipeline_form_new(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "pipeline_form.html",
+        {"pipeline": None, "steps_text": ""},
+    )
+
+
+@router.post("/pipelines", response_class=HTMLResponse)
+def pipeline_create_form(
+    name: str = Form(...),
+    description: str = Form(""),
+    steps_text: str = Form(""),
+    enabled: str = Form(""),
+    task_service: TaskService = Depends(get_task_service),
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+):
+    task_ids = _resolve_task_names(steps_text, task_service)
+    pipeline_service.create(
+        name=name,
+        description=description or None,
+        task_ids=task_ids,
+        enabled=bool(enabled),
+    )
+    return RedirectResponse("/ui/pipelines/", status_code=303)
+
+
+@router.get("/pipelines/{pipeline_id}", response_class=HTMLResponse)
+def pipeline_detail(
+    request: Request,
+    pipeline_id: str,
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+    pipeline_run_service: PipelineRunService = Depends(get_pipeline_run_service),
+):
+    try:
+        pipeline = pipeline_service.get(pipeline_id)
+    except PipelineNotFoundError:
+        raise HTTPException(404, "Pipeline not found")
+    runs = pipeline_run_service.list(pipeline_id=pipeline_id)
+    return templates.TemplateResponse(
+        request,
+        "pipeline_detail.html",
+        {"pipeline": pipeline, "runs": runs},
+    )
+
+
+@router.get("/pipelines/{pipeline_id}/edit", response_class=HTMLResponse)
+def pipeline_edit_form(
+    request: Request,
+    pipeline_id: str,
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+):
+    try:
+        pipeline = pipeline_service.get(pipeline_id)
+    except PipelineNotFoundError:
+        raise HTTPException(404, "Pipeline not found")
+    steps_text = "\n".join(step.task.name for step in pipeline.steps)
+    return templates.TemplateResponse(
+        request,
+        "pipeline_form.html",
+        {"pipeline": pipeline, "steps_text": steps_text},
+    )
+
+
+@router.post("/pipelines/{pipeline_id}", response_class=HTMLResponse)
+def pipeline_update_form(
+    pipeline_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    steps_text: str = Form(""),
+    enabled: str = Form(""),
+    task_service: TaskService = Depends(get_task_service),
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+):
+    try:
+        pipeline_service.update(
+            pipeline_id,
+            name=name,
+            description=description or None,
+            enabled=bool(enabled),
+        )
+    except PipelineNotFoundError:
+        raise HTTPException(404, "Pipeline not found")
+    task_ids = _resolve_task_names(steps_text, task_service)
+    pipeline_service.update_steps(pipeline_id, task_ids)
+    return RedirectResponse(f"/ui/pipelines/{pipeline_id}", status_code=303)
+
+
+@router.get("/pipeline-runs/{run_id}", response_class=HTMLResponse)
+def pipeline_run_detail(
+    request: Request,
+    run_id: str,
+    pipeline_run_service: PipelineRunService = Depends(get_pipeline_run_service),
+):
+    try:
+        pipeline_run = pipeline_run_service.get(run_id)
+    except PipelineRunNotFoundError:
+        raise HTTPException(404, "Pipeline run not found")
+    step_runs = sorted(pipeline_run.step_runs, key=lambda r: r.started_at)
+    return templates.TemplateResponse(
+        request,
+        "pipeline_run_detail.html",
+        {"pipeline_run": pipeline_run, "step_runs": step_runs},
+    )
+
+
+def _resolve_task_names(steps_text: str, task_service: TaskService) -> list[str]:
+    """Parse textarea lines into task IDs by resolving task names."""
+    task_ids: list[str] = []
+    for line in steps_text.strip().splitlines():
+        name = line.strip()
+        if not name:
+            continue
+        try:
+            task = task_service.get_by_name(name)
+        except TaskNotFoundError:
+            raise HTTPException(422, f"Task not found: {name}")
+        task_ids.append(task.id)
+    return task_ids
 
 
 # ── Runs UI ───────────────────────────────────────────

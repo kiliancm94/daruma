@@ -5,6 +5,7 @@ import json
 from sqlalchemy.orm import Session
 
 from app.crud.exceptions import NotFoundError
+from app.models.pipeline import Pipeline, PipelineStep
 from app.models.task import Task
 from app.schemas.task import TaskUpdate, OutputFormat
 from app.utils.date_helpers import utcnow
@@ -69,8 +70,22 @@ def update(session: Session, task_id: str, **fields) -> Task:
 
 
 def delete(session: Session, task_id: str) -> None:
-    """Delete a task. Raises NotFoundError if the task does not exist."""
+    """Delete a task.
+
+    Raises NotFoundError if the task does not exist.
+    Raises ValueError if the task is referenced by any pipeline step.
+    """
     if (task := get(session, task_id)) is None:
         raise NotFoundError(f"Task not found: {task_id}")
+    pipeline_names = (
+        session.query(Pipeline.name)
+        .join(PipelineStep, PipelineStep.pipeline_id == Pipeline.id)
+        .filter(PipelineStep.task_id == task_id)
+        .distinct()
+        .all()
+    )
+    if pipeline_names:
+        names = ", ".join(row[0] for row in pipeline_names)
+        raise ValueError(f"Cannot delete task: used in pipeline(s): {names}")
     session.delete(task)
     session.commit()

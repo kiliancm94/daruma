@@ -2,6 +2,7 @@ import pytest
 
 from app.crud import tasks as task_crud
 from app.crud import runs as run_crud
+from app.crud import pipelines as pipeline_crud
 from app.crud.exceptions import NotFoundError
 
 
@@ -121,6 +122,19 @@ class TestTaskCrud:
             env_vars={"TOKEN": "abc"},
         )
         assert json.loads(updated.env_vars) == {"TOKEN": "abc"}
+
+    def test_delete_task_used_in_pipeline(self, db_session):
+        task = task_crud.create(db_session, name="Guarded", prompt="p")
+        pipeline_crud.create(db_session, name="Pipeline A", task_ids=[task.id])
+        with pytest.raises(ValueError, match="Pipeline A"):
+            task_crud.delete(db_session, task.id)
+        # Task should still exist
+        assert task_crud.get(db_session, task.id) is not None
+
+    def test_delete_task_not_in_pipeline(self, db_session):
+        task = task_crud.create(db_session, name="Free", prompt="p")
+        task_crud.delete(db_session, task.id)
+        assert task_crud.get(db_session, task.id) is None
 
 
 class TestRunCrud:
