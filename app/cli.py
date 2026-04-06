@@ -9,7 +9,7 @@ from rich.table import Table
 from app.config import DB_PATH
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
-from app.schemas.task import TaskResponse
+from app.schemas.task import TaskResponse, OutputFormat, OutputDestination
 from app.schemas.run import RunResponse
 from app.services import (
     TaskService,
@@ -81,7 +81,18 @@ def list_tasks(as_json):
     help="Claude model to use",
 )
 @click.option("--disabled", is_flag=True, help="Create in disabled state")
-def create_task(name, prompt, cron, tools, model, disabled):
+@click.option(
+    "--output-format",
+    type=click.Choice(list(OutputFormat), case_sensitive=False),
+    default=None,
+    help="Output format: text, json, or md",
+)
+@click.option(
+    "--output-dest",
+    default=None,
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
+)
+def create_task(name, prompt, cron, tools, model, disabled, output_format, output_dest):
     """Create a new task."""
     session = _connect()
     task_service = TaskService(session)
@@ -92,6 +103,8 @@ def create_task(name, prompt, cron, tools, model, disabled):
         allowed_tools=tools,
         model=model,
         enabled=not disabled,
+        output_format=output_format,
+        output_destination=output_dest,
     )
     session.close()
     click.echo(f"Created task: {task.name} ({task.id[:8]})")
@@ -116,6 +129,8 @@ def show_task(task_id, as_json):
     click.echo(f"Cron:    {task.cron_expression or 'none'}")
     click.echo(f"Tools:   {task.allowed_tools or 'all'}")
     click.echo(f"Enabled: {task.enabled}")
+    click.echo(f"Output format: {task.output_format or 'text (default)'}")
+    click.echo(f"Output dest:   {task.output_destination or 'none'}")
     click.echo(f"Created: {task.created_at}")
     click.echo(f"Updated: {task.updated_at}")
 
@@ -133,7 +148,20 @@ def show_task(task_id, as_json):
     help="Claude model to use",
 )
 @click.option("--enable/--disable", default=None)
-def edit_task(task_id, name, prompt, cron, tools, model, enable):
+@click.option(
+    "--output-format",
+    type=click.Choice(list(OutputFormat), case_sensitive=False),
+    default=None,
+    help="Output format: text, json, or md",
+)
+@click.option(
+    "--output-dest",
+    default=None,
+    help=f"Where to write output: a file path, a folder path, or '{OutputDestination.pipeline}' for task chaining",
+)
+def edit_task(
+    task_id, name, prompt, cron, tools, model, enable, output_format, output_dest
+):
     """Update a task."""
     session = _connect()
     task_service = TaskService(session)
@@ -151,6 +179,10 @@ def edit_task(task_id, name, prompt, cron, tools, model, enable):
         fields["model"] = model
     if enable is not None:
         fields["enabled"] = enable
+    if output_format is not None:
+        fields["output_format"] = output_format
+    if output_dest is not None:
+        fields["output_destination"] = output_dest
     if not fields:
         click.echo("Nothing to update.")
         return

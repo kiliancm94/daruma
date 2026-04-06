@@ -1,6 +1,18 @@
 """Pydantic schemas for tasks — API and CLI input/output."""
 
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict
+
+
+class OutputFormat(StrEnum):
+    text = "text"
+    json = "json"
+    md = "md"
+
+
+class OutputDestination(StrEnum):
+    pipeline = "pipeline"
 
 
 class TaskCreate(BaseModel):
@@ -10,6 +22,8 @@ class TaskCreate(BaseModel):
     allowed_tools: str | None = None
     model: str = "sonnet"
     enabled: bool = True
+    output_format: OutputFormat | None = None
+    output_destination: str | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -19,6 +33,8 @@ class TaskUpdate(BaseModel):
     allowed_tools: str | None = None
     model: str | None = None
     enabled: bool | None = None
+    output_format: OutputFormat | None = None
+    output_destination: str | None = None
 
 
 class TaskResponse(BaseModel):
@@ -31,5 +47,7 @@ class TaskResponse(BaseModel):
     allowed_tools: str | None
     model: str
     enabled: bool
+    output_format: OutputFormat | None
+    output_destination: str | None
     created_at: str
     updated_at: str

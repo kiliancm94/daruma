@@ -19,6 +19,8 @@ def test_tasks_table_has_expected_columns(engine):
         "allowed_tools",
         "model",
         "enabled",
+        "output_format",
+        "output_destination",
         "created_at",
         "updated_at",
     }
