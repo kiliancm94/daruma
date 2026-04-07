@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from click.testing import CliRunner
 
-from app.cli import cli, _build_plist, PLIST_LABEL, HOSTS_MARKER
+from app.cli import cli, _build_plist, PLIST_LABEL
 
 
 @pytest.fixture
@@ -458,15 +458,8 @@ class TestServiceCommands:
 
     def test_service_install(self, runner, tmp_path):
         plist_path = tmp_path / "com.daruma.server.plist"
-        hosts_file = tmp_path / "hosts"
-        hosts_file.write_text("127.0.0.1\tlocalhost\n")
-        anchor_file = tmp_path / "com.daruma"
-        pf_conf = tmp_path / "pf.conf"
-        pf_conf.write_text("")
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli.HOSTS_FILE", hosts_file),
-            patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file),
             patch("app.cli._add_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):
@@ -475,18 +468,15 @@ class TestServiceCommands:
             result = runner.invoke(cli, ["service", "install"])
             assert result.exit_code == 0
             assert "Service installed" in result.output
-            assert "http://daruma.local" in result.output
+            assert "http://daruma.localhost" in result.output
             assert plist_path.exists()
             assert PLIST_LABEL in plist_path.read_text()
 
     def test_service_install_replaces_existing(self, runner, tmp_path):
         plist_path = tmp_path / "com.daruma.server.plist"
         plist_path.write_text("old content")
-        hosts_file = tmp_path / "hosts"
-        hosts_file.write_text(f"127.0.0.1\tdaruma.local  {HOSTS_MARKER}\n")
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli.HOSTS_FILE", hosts_file),
             patch("app.cli._add_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):
@@ -494,18 +484,12 @@ class TestServiceCommands:
             mock_pfctl.return_value = True
             result = runner.invoke(cli, ["service", "install"])
             assert result.exit_code == 0
-            assert "already in" in result.output
 
     def test_service_uninstall(self, runner, tmp_path):
         plist_path = tmp_path / "com.daruma.server.plist"
         plist_path.write_text("some plist")
-        hosts_file = tmp_path / "hosts"
-        hosts_file.write_text(
-            f"127.0.0.1\tlocalhost\n127.0.0.1\tdaruma.local  {HOSTS_MARKER}\n"
-        )
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli.HOSTS_FILE", hosts_file),
             patch("app.cli._remove_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):

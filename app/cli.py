@@ -731,8 +731,6 @@ def run_task(task_name_or_id):
 
 PLIST_LABEL = "com.daruma.server"
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
-HOSTS_FILE = Path("/etc/hosts")
-HOSTS_MARKER = f"# daruma-managed: {HOSTNAME}"
 PFCTL_ANCHOR = "com.daruma"
 PFCTL_ANCHOR_FILE = Path("/etc/pf.anchors") / PFCTL_ANCHOR
 
@@ -772,40 +770,6 @@ def _build_plist(host: str, port: int) -> str:
 </dict>
 </plist>
 """
-
-
-def _add_hosts_entry(host: str) -> bool:
-    """Add daruma.local to /etc/hosts. Returns True if added, False if already present."""
-    content = HOSTS_FILE.read_text()
-    if HOSTS_MARKER in content:
-        return False
-    line = f"{host}\t{HOSTNAME}  {HOSTS_MARKER}\n"
-    import subprocess
-
-    result = subprocess.run(
-        ["sudo", "tee", "-a", str(HOSTS_FILE)],
-        input=line,
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
-
-
-def _remove_hosts_entry() -> bool:
-    """Remove daruma.local from /etc/hosts. Returns True if removed."""
-    content = HOSTS_FILE.read_text()
-    if HOSTS_MARKER not in content:
-        return False
-    lines = [line for line in content.splitlines(True) if HOSTS_MARKER not in line]
-    import subprocess
-
-    result = subprocess.run(
-        ["sudo", "tee", str(HOSTS_FILE)],
-        input="".join(lines),
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
 
 
 def _insert_after(lines: list[str], marker: str, new_line: str) -> list[str]:
@@ -915,11 +879,6 @@ def service_install(host, port):
         click.echo(f"Failed to load service: {result.stderr}", err=True)
         raise SystemExit(1)
 
-    if _add_hosts_entry(host):
-        click.echo(f"Added {HOSTNAME} to /etc/hosts")
-    else:
-        click.echo(f"{HOSTNAME} already in /etc/hosts")
-
     if _add_pfctl_redirect(port):
         click.echo(f"Port forwarding: http://{HOSTNAME} -> :{port}")
     else:
@@ -942,9 +901,6 @@ def service_uninstall():
         capture_output=True,
     )
     PLIST_PATH.unlink()
-
-    if _remove_hosts_entry():
-        click.echo(f"Removed {HOSTNAME} from /etc/hosts")
 
     if _remove_pfctl_redirect():
         click.echo("Removed port forwarding rule")

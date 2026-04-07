@@ -7,4 +7,4 @@ DATA_DIR = Path(
 DB_PATH = DATA_DIR / "automations.db"
 PORT = int(os.environ.get("DARUMA_PORT", "9090"))
 HOST = os.environ.get("DARUMA_HOST", "127.0.0.1")
-HOSTNAME = "daruma.local"
+HOSTNAME = "daruma.localhost"
