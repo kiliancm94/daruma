@@ -735,11 +735,25 @@ PFCTL_ANCHOR = "com.daruma"
 PFCTL_ANCHOR_FILE = Path("/etc/pf.anchors") / PFCTL_ANCHOR
 
 
+def _find_project_root() -> Path:
+    """Find the git root, falling back to parent of app/ directory."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return Path(result.stdout.strip())
+    return Path(__file__).resolve().parent.parent
+
+
 def _build_plist(host: str, port: int) -> str:
     """Generate launchd plist XML for the Daruma server."""
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = _find_project_root()
     daruma_bin = project_dir / ".venv" / "bin" / "daruma"
-    log_dir = project_dir / "data"
+    data_dir = project_dir / "data"
     return f"""\
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -759,14 +773,19 @@ def _build_plist(host: str, port: int) -> str:
     </array>
     <key>WorkingDirectory</key>
     <string>{project_dir}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DARUMA_DATA_DIR</key>
+        <string>{data_dir}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{log_dir / "server.log"}</string>
+    <string>{data_dir / "server.log"}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / "server.err"}</string>
+    <string>{data_dir / "server.err"}</string>
 </dict>
 </plist>
 """
