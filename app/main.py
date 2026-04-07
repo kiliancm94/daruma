@@ -73,10 +73,6 @@ app.include_router(pipelines_router.router)
 app.include_router(pipeline_triggers_router.router)
 app.include_router(ui_router.router)
 
-static_dir = Path(__file__).parent.parent / "static"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -86,3 +82,8 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+static_dir = Path(__file__).parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
