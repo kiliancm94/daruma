@@ -221,12 +221,7 @@ def skills_list(
     request: Request,
     skill_service: SkillService = Depends(get_skill_service),
 ):
-    local = [
-        {"id": s.id, "name": s.name, "description": s.description, "source": s.source}
-        for s in skill_service.list_local()
-    ]
-    global_skills = skill_service.list_global()
-    all_skills = local + global_skills
+    all_skills = skill_service.list_all()
     return templates.TemplateResponse(
         request, "skills_list.html", {"skills": all_skills}
     )

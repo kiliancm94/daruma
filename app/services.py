@@ -604,12 +604,16 @@ def execute_pipeline(
         pipeline_run_crud.update_step(session, pipeline_run.id, step.step_order)
 
         if status == "failed":
-            return pipeline_run_crud.complete(session, pipeline_run.id, status=PipelineRunStatus.failed)
+            return pipeline_run_crud.complete(
+                session, pipeline_run.id, status=PipelineRunStatus.failed
+            )
 
         # Store stdout for the next step
         previous_stdout = result["stdout"]
 
-    return pipeline_run_crud.complete(session, pipeline_run.id, status=PipelineRunStatus.success)
+    return pipeline_run_crud.complete(
+        session, pipeline_run.id, status=PipelineRunStatus.success
+    )
 
 
 def execute_pipeline_background(
@@ -650,7 +654,9 @@ def _pipeline_background_worker(
         # Re-load pipeline within this session
         fresh_pipeline = pipeline_crud.get(session, pipeline.id)
         if not fresh_pipeline:
-            pipeline_run_crud.complete(session, pipeline_run_id, status=PipelineRunStatus.failed)
+            pipeline_run_crud.complete(
+                session, pipeline_run_id, status=PipelineRunStatus.failed
+            )
             return
 
         steps = sorted(fresh_pipeline.steps, key=lambda s: s.step_order)
@@ -713,15 +719,21 @@ def _pipeline_background_worker(
             pipeline_run_crud.update_step(session, pipeline_run_id, step.step_order)
 
             if status == "failed":
-                pipeline_run_crud.complete(session, pipeline_run_id, status=PipelineRunStatus.failed)
+                pipeline_run_crud.complete(
+                    session, pipeline_run_id, status=PipelineRunStatus.failed
+                )
                 return
 
             previous_stdout = result["stdout"]
 
-        pipeline_run_crud.complete(session, pipeline_run_id, status=PipelineRunStatus.success)
+        pipeline_run_crud.complete(
+            session, pipeline_run_id, status=PipelineRunStatus.success
+        )
     except Exception:
         try:
-            pipeline_run_crud.complete(session, pipeline_run_id, status=PipelineRunStatus.failed)
+            pipeline_run_crud.complete(
+                session, pipeline_run_id, status=PipelineRunStatus.failed
+            )
         except Exception:
             pass
     finally:

@@ -2,12 +2,13 @@
 
 import json
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
 
-from app.config import DB_PATH
+from app.config import DB_PATH, PORT, HOST, HOSTNAME
 from app.utils.env_vars import parse_env_pairs
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
@@ -41,6 +42,19 @@ def _connect():
 @click.group()
 def cli():
     """Daruma — Claude automation task runner."""
+
+
+# ── Server ─────────────────────────────────────────────
+
+
+@cli.command("server")
+@click.option("--host", default=HOST, show_default=True, help="Bind address")
+@click.option("--port", default=PORT, show_default=True, help="Bind port")
+def server(host, port):
+    """Start the Daruma web server."""
+    import uvicorn
+
+    uvicorn.run("app.main:app", host=host, port=port)
 
 
 # ── Tasks ──────────────────────────────────────────────
@@ -710,6 +724,141 @@ def run_task(task_name_or_id):
     )
     if result.status != "success":
         sys.exit(1)
+
+
+# ── Service ─────────────────────────────────────────────
+
+
+PLIST_LABEL = "com.daruma.server"
+PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
+
+
+def _find_project_root() -> Path:
+    """Find the main git checkout root (not a worktree)."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        git_dir = Path(result.stdout.strip()).resolve()
+        return git_dir.parent
+    return Path(__file__).resolve().parent.parent
+
+
+def _build_plist(host: str, port: int) -> str:
+    """Generate launchd plist XML for the Daruma server."""
+    project_dir = _find_project_root()
+    daruma_bin = project_dir / ".venv" / "bin" / "daruma"
+    data_dir = project_dir / "data"
+    return f"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{PLIST_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{daruma_bin}</string>
+        <string>server</string>
+        <string>--host</string>
+        <string>{host}</string>
+        <string>--port</string>
+        <string>{port}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{project_dir}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DARUMA_DATA_DIR</key>
+        <string>{data_dir}</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{data_dir / "server.log"}</string>
+    <key>StandardErrorPath</key>
+    <string>{data_dir / "server.err"}</string>
+</dict>
+</plist>
+"""
+
+
+@cli.group()
+def service():
+    """Manage the Daruma macOS background service."""
+
+
+@service.command("install")
+@click.option("--host", default=HOST, show_default=True, help="Bind address")
+@click.option("--port", default=PORT, show_default=True, help="Bind port")
+def service_install(host, port):
+    """Install and start the Daruma launchd agent."""
+    import subprocess
+
+    plist_content = _build_plist(host, port)
+    PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    if PLIST_PATH.exists():
+        subprocess.run(
+            ["launchctl", "unload", str(PLIST_PATH)],
+            capture_output=True,
+        )
+
+    PLIST_PATH.write_text(plist_content)
+    result = subprocess.run(
+        ["launchctl", "load", str(PLIST_PATH)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        click.echo(f"Failed to load service: {result.stderr}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"Service installed and started — http://{HOSTNAME}:{port}")
+    click.echo(f"Plist: {PLIST_PATH}")
+
+
+@service.command("uninstall")
+def service_uninstall():
+    """Stop and remove the Daruma launchd agent."""
+    import subprocess
+
+    if not PLIST_PATH.exists():
+        click.echo("Service not installed.")
+        return
+    subprocess.run(
+        ["launchctl", "unload", str(PLIST_PATH)],
+        capture_output=True,
+    )
+    PLIST_PATH.unlink()
+
+    click.echo("Service stopped and removed.")
+
+
+@service.command("status")
+def service_status():
+    """Check whether the Daruma service is running."""
+    import subprocess
+
+    result = subprocess.run(
+        ["launchctl", "list", PLIST_LABEL],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        click.echo("Service is not running.")
+        if not PLIST_PATH.exists():
+            click.echo("(Not installed)")
+        raise SystemExit(1)
+    for line in result.stdout.strip().splitlines():
+        click.echo(line)
 
 
 # ── Helpers ────────────────────────────────────────────
