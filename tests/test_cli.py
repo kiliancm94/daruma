@@ -460,15 +460,13 @@ class TestServiceCommands:
         plist_path = tmp_path / "com.daruma.server.plist"
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli._add_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = MagicMock(returncode=0, stderr="")
-            mock_pfctl.return_value = True
             result = runner.invoke(cli, ["service", "install"])
             assert result.exit_code == 0
             assert "Service installed" in result.output
-            assert "http://daruma.localhost" in result.output
+            assert "daruma.localhost" in result.output
             assert plist_path.exists()
             assert PLIST_LABEL in plist_path.read_text()
 
@@ -477,28 +475,24 @@ class TestServiceCommands:
         plist_path.write_text("old content")
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli._add_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = MagicMock(returncode=0, stderr="")
-            mock_pfctl.return_value = True
             result = runner.invoke(cli, ["service", "install"])
             assert result.exit_code == 0
+            assert mock_run.call_count == 2  # unload + load
 
     def test_service_uninstall(self, runner, tmp_path):
         plist_path = tmp_path / "com.daruma.server.plist"
         plist_path.write_text("some plist")
         with (
             patch("app.cli.PLIST_PATH", plist_path),
-            patch("app.cli._remove_pfctl_redirect") as mock_pfctl,
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = MagicMock(returncode=0)
-            mock_pfctl.return_value = True
             result = runner.invoke(cli, ["service", "uninstall"])
             assert result.exit_code == 0
             assert "stopped and removed" in result.output
-            assert "Removed port forwarding" in result.output
             assert not plist_path.exists()
 
     def test_service_uninstall_not_installed(self, runner, tmp_path):
@@ -534,50 +528,3 @@ class TestServiceCommands:
             result = runner.invoke(cli, ["service", "status"])
             assert result.exit_code == 0
             assert "PID" in result.output
-
-    def test_pfctl_redirect_creates_anchor(self, tmp_path):
-        from app.cli import _add_pfctl_redirect
-
-        anchor_file = tmp_path / "com.daruma"
-        pf_conf = tmp_path / "pf.conf"
-        pf_conf.write_text("# default pf.conf\n")
-        with (
-            patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file),
-            patch("app.cli.Path") as mock_path_cls,
-            patch("subprocess.run") as mock_run,
-        ):
-            mock_path_cls.return_value = pf_conf
-            mock_run.return_value = MagicMock(returncode=0)
-            # Mock Path("/etc/pf.conf") to return our tmp pf_conf
-            result = _add_pfctl_redirect(9090)
-            assert result is True
-            # Verify sudo tee was called with the anchor content
-            first_call_args = mock_run.call_args_list[0]
-            assert "tee" in first_call_args[0][0]
-            assert "9090" in first_call_args[1].get("input", "")
-
-    def test_pfctl_remove_when_no_anchor(self, tmp_path):
-        from app.cli import _remove_pfctl_redirect
-
-        anchor_file = tmp_path / "com.daruma"
-        with patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file):
-            result = _remove_pfctl_redirect()
-            assert result is False
-
-    def test_insert_after_respects_pf_conf_order(self):
-        from app.cli import _insert_after
-
-        lines = [
-            'scrub-anchor "com.apple/*"\n',
-            'nat-anchor "com.apple/*"\n',
-            'rdr-anchor "com.apple/*"\n',
-            'dummynet-anchor "com.apple/*"\n',
-            'anchor "com.apple/*"\n',
-            'load anchor "com.apple" from "/etc/pf.anchors/com.apple"\n',
-        ]
-        # rdr-anchor should go after the last rdr-anchor (index 2)
-        result = _insert_after(lines, "rdr-anchor", 'rdr-anchor "com.daruma"\n')
-        assert result[3] == 'rdr-anchor "com.daruma"\n'
-        # load anchor should go after the last load anchor (now index 7)
-        result = _insert_after(result, "load anchor", 'load anchor "com.daruma" ...\n')
-        assert result[-1] == 'load anchor "com.daruma" ...\n'

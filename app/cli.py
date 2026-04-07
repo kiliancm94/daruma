@@ -731,8 +731,6 @@ def run_task(task_name_or_id):
 
 PLIST_LABEL = "com.daruma.server"
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
-PFCTL_ANCHOR = "com.daruma"
-PFCTL_ANCHOR_FILE = Path("/etc/pf.anchors") / PFCTL_ANCHOR
 
 
 def _find_project_root() -> Path:
@@ -792,82 +790,6 @@ def _build_plist(host: str, port: int) -> str:
 """
 
 
-def _insert_after(lines: list[str], marker: str, new_line: str) -> list[str]:
-    """Insert new_line after the last line containing marker, preserving pf.conf order."""
-    result = list(lines)
-    insert_idx = len(result)
-    for i, line in enumerate(result):
-        if marker in line:
-            insert_idx = i + 1
-    result.insert(insert_idx, new_line)
-    return result
-
-
-def _add_pfctl_redirect(port: int) -> bool:
-    """Set up pfctl port-forwarding: 80 → server port on lo0."""
-    import subprocess
-
-    rule = f"rdr pass on lo0 proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port {port}\n"
-    # Write anchor file
-    result = subprocess.run(
-        ["sudo", "tee", str(PFCTL_ANCHOR_FILE)],
-        input=rule,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return False
-
-    # Register anchor in pf.conf — must respect rule ordering:
-    # rdr-anchor goes with other rdr-anchors, load anchor goes with other load anchors
-    pf_conf = Path("/etc/pf.conf")
-    pf_lines = pf_conf.read_text().splitlines(True)
-    anchor_line = f'rdr-anchor "{PFCTL_ANCHOR}"'
-    load_line = f'load anchor "{PFCTL_ANCHOR}" from "{PFCTL_ANCHOR_FILE}"'
-
-    if anchor_line not in "".join(pf_lines):
-        # Insert rdr-anchor after last existing rdr-anchor line
-        pf_lines = _insert_after(pf_lines, "rdr-anchor", anchor_line + "\n")
-        # Insert load anchor after last existing load anchor line
-        pf_lines = _insert_after(pf_lines, "load anchor", load_line + "\n")
-        subprocess.run(
-            ["sudo", "tee", str(pf_conf)],
-            input="".join(pf_lines),
-            capture_output=True,
-            text=True,
-        )
-
-    # Reload pf rules
-    subprocess.run(["sudo", "pfctl", "-ef", str(pf_conf)], capture_output=True)
-    return True
-
-
-def _remove_pfctl_redirect() -> bool:
-    """Remove pfctl port-forwarding rules."""
-    import subprocess
-
-    if not PFCTL_ANCHOR_FILE.exists():
-        return False
-
-    # Remove anchor file
-    subprocess.run(["sudo", "rm", str(PFCTL_ANCHOR_FILE)], capture_output=True)
-
-    # Remove anchor lines from pf.conf
-    pf_conf = Path("/etc/pf.conf")
-    pf_content = pf_conf.read_text()
-    lines = [line for line in pf_content.splitlines(True) if PFCTL_ANCHOR not in line]
-    subprocess.run(
-        ["sudo", "tee", str(pf_conf)],
-        input="".join(lines),
-        capture_output=True,
-        text=True,
-    )
-
-    # Reload pf rules
-    subprocess.run(["sudo", "pfctl", "-ef", str(pf_conf)], capture_output=True)
-    return True
-
-
 @cli.group()
 def service():
     """Manage the Daruma macOS background service."""
@@ -899,12 +821,7 @@ def service_install(host, port):
         click.echo(f"Failed to load service: {result.stderr}", err=True)
         raise SystemExit(1)
 
-    if _add_pfctl_redirect(port):
-        click.echo(f"Port forwarding: http://{HOSTNAME} -> :{port}")
-    else:
-        click.echo("Failed to set up port forwarding", err=True)
-
-    click.echo(f"Service installed and started — http://{HOSTNAME}")
+    click.echo(f"Service installed and started — http://{HOSTNAME}:{port}")
     click.echo(f"Plist: {PLIST_PATH}")
 
 
@@ -921,9 +838,6 @@ def service_uninstall():
         capture_output=True,
     )
     PLIST_PATH.unlink()
-
-    if _remove_pfctl_redirect():
-        click.echo("Removed port forwarding rule")
 
     click.echo("Service stopped and removed.")
 
