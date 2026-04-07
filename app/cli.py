@@ -736,16 +736,17 @@ PFCTL_ANCHOR_FILE = Path("/etc/pf.anchors") / PFCTL_ANCHOR
 
 
 def _find_project_root() -> Path:
-    """Find the git root, falling back to parent of app/ directory."""
+    """Find the main git checkout root (not a worktree)."""
     import subprocess
 
     result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        ["git", "rev-parse", "--git-common-dir"],
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
-        return Path(result.stdout.strip())
+        git_dir = Path(result.stdout.strip()).resolve()
+        return git_dir.parent
     return Path(__file__).resolve().parent.parent
 
 
