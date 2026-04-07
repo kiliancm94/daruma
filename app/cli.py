@@ -808,6 +808,17 @@ def _remove_hosts_entry() -> bool:
     return result.returncode == 0
 
 
+def _insert_after(lines: list[str], marker: str, new_line: str) -> list[str]:
+    """Insert new_line after the last line containing marker, preserving pf.conf order."""
+    result = list(lines)
+    insert_idx = len(result)
+    for i, line in enumerate(result):
+        if marker in line:
+            insert_idx = i + 1
+    result.insert(insert_idx, new_line)
+    return result
+
+
 def _add_pfctl_redirect(port: int) -> bool:
     """Set up pfctl port-forwarding: 80 → server port on lo0."""
     import subprocess
@@ -823,16 +834,21 @@ def _add_pfctl_redirect(port: int) -> bool:
     if result.returncode != 0:
         return False
 
-    # Register anchor in pf.conf if not already present
+    # Register anchor in pf.conf — must respect rule ordering:
+    # rdr-anchor goes with other rdr-anchors, load anchor goes with other load anchors
     pf_conf = Path("/etc/pf.conf")
-    pf_content = pf_conf.read_text()
+    pf_lines = pf_conf.read_text().splitlines(True)
     anchor_line = f'rdr-anchor "{PFCTL_ANCHOR}"'
     load_line = f'load anchor "{PFCTL_ANCHOR}" from "{PFCTL_ANCHOR_FILE}"'
-    if anchor_line not in pf_content:
-        addition = f"{anchor_line}\n{load_line}\n"
+
+    if anchor_line not in "".join(pf_lines):
+        # Insert rdr-anchor after last existing rdr-anchor line
+        pf_lines = _insert_after(pf_lines, "rdr-anchor", anchor_line + "\n")
+        # Insert load anchor after last existing load anchor line
+        pf_lines = _insert_after(pf_lines, "load anchor", load_line + "\n")
         subprocess.run(
-            ["sudo", "tee", "-a", str(pf_conf)],
-            input=addition,
+            ["sudo", "tee", str(pf_conf)],
+            input="".join(pf_lines),
             capture_output=True,
             text=True,
         )

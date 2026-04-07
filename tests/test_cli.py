@@ -579,3 +579,21 @@ class TestServiceCommands:
         with patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file):
             result = _remove_pfctl_redirect()
             assert result is False
+
+    def test_insert_after_respects_pf_conf_order(self):
+        from app.cli import _insert_after
+
+        lines = [
+            'scrub-anchor "com.apple/*"\n',
+            'nat-anchor "com.apple/*"\n',
+            'rdr-anchor "com.apple/*"\n',
+            'dummynet-anchor "com.apple/*"\n',
+            'anchor "com.apple/*"\n',
+            'load anchor "com.apple" from "/etc/pf.anchors/com.apple"\n',
+        ]
+        # rdr-anchor should go after the last rdr-anchor (index 2)
+        result = _insert_after(lines, "rdr-anchor", 'rdr-anchor "com.daruma"\n')
+        assert result[3] == 'rdr-anchor "com.daruma"\n'
+        # load anchor should go after the last load anchor (now index 7)
+        result = _insert_after(result, "load anchor", 'load anchor "com.daruma" ...\n')
+        assert result[-1] == 'load anchor "com.daruma" ...\n'
