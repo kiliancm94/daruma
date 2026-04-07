@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import get_db
 from app.db import get_session_factory as _get_session_factory
 from app.runner import run_claude
-from app.schemas.pipeline import PipelineRunResponse
+from app.schemas.pipeline import PipelineRunResponse, PipelineTrigger
 from app.services import (
     PipelineService,
     PipelineRunService,
@@ -50,7 +50,7 @@ def trigger_pipeline(
     except PipelineNotFoundError:
         raise HTTPException(404, "Pipeline not found")
     return execute_pipeline_background(
-        pipeline, session_factory, trigger="manual", runner=runner
+        pipeline, session_factory, trigger=PipelineTrigger.manual, runner=runner
     )
 
 

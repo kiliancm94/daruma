@@ -27,6 +27,7 @@ from app.services import (
     execute_pipeline,
     _parse_skill_frontmatter,
 )
+from app.schemas.pipeline import PipelineTrigger
 from app.schemas.pipeline import PipelineResponse
 
 console = Console()
@@ -519,9 +520,9 @@ def list_pipelines(as_json):
     table.add_column("Name")
     table.add_column("Steps", style="cyan")
     table.add_column("Status")
-    for p in items:
-        status = "[green]enabled[/green]" if p.enabled else "[red]disabled[/red]"
-        table.add_row(p.id[:8], p.name, str(len(p.steps)), status)
+    for pipeline in items:
+        status = "[green]enabled[/green]" if pipeline.enabled else "[red]disabled[/red]"
+        table.add_row(pipeline.id[:8], pipeline.name, str(len(pipeline.steps)), status)
     session.close()
     console.print(table)
 
@@ -663,7 +664,7 @@ def run_pipeline(name_or_id):
     result = execute_pipeline(
         pipeline,
         session,
-        trigger="manual",
+        trigger=PipelineTrigger.manual,
     )
     session.close()
 

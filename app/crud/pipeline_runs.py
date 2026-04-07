@@ -6,25 +6,22 @@ from sqlalchemy.orm import Session
 
 from app.crud.exceptions import NotFoundError
 from app.models.pipeline_run import PipelineRun
+from app.schemas.pipeline import PipelineRunStatus, PipelineTrigger
 from app.utils.date_helpers import utcnow
 
 
 def create(
     session: Session,
     pipeline_id: str,
-    trigger: str = "manual",
-    pipeline_run_id: str | None = None,
+    trigger: PipelineTrigger = PipelineTrigger.manual,
 ) -> PipelineRun:
     """Create a pipeline run with status='running' and started_at=utcnow()."""
-    kwargs: dict = dict(
+    run = PipelineRun(
         pipeline_id=pipeline_id,
         trigger=trigger,
-        status="running",
+        status=PipelineRunStatus.running,
         started_at=utcnow(),
     )
-    if pipeline_run_id is not None:
-        kwargs["id"] = pipeline_run_id
-    run = PipelineRun(**kwargs)
     session.add(run)
     session.commit()
     session.refresh(run)
@@ -48,7 +45,7 @@ def update_step(session: Session, run_id: str, current_step: int) -> PipelineRun
 def complete(
     session: Session,
     run_id: str,
-    status: str,
+    status: PipelineRunStatus,
     finished_at: str | None = None,
     duration_ms: int | None = None,
 ) -> PipelineRun:

@@ -1,6 +1,19 @@
 """Pydantic schemas for pipelines — API and CLI input/output."""
 
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict
+
+
+class PipelineRunStatus(StrEnum):
+    running = "running"
+    success = "success"
+    failed = "failed"
+
+
+class PipelineTrigger(StrEnum):
+    manual = "manual"
+    cron = "cron"
 
 
 class PipelineStepCreate(BaseModel):
@@ -45,8 +58,8 @@ class PipelineRunResponse(BaseModel):
 
     id: str
     pipeline_id: str
-    status: str
-    trigger: str
+    status: PipelineRunStatus
+    trigger: PipelineTrigger
     current_step: int | None
     started_at: str
     finished_at: str | None
