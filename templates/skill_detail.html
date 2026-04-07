@@ -16,6 +16,10 @@
     <div class="text-dim text-sm" style="margin-bottom:0.5rem;">Description</div>
     <div>{{ skill.description or "—" }}</div>
     <div class="text-dim text-sm" style="margin-top:1rem; margin-bottom:0.5rem;">Content</div>
-    <div class="log-output">{{ skill.content }}</div>
+    <div class="md-content" id="skill-content"></div>
+    <script>
+        document.getElementById('skill-content').innerHTML =
+            marked.parse({{ skill.content | tojson }});
+    </script>
 </div>
 {% endblock %}

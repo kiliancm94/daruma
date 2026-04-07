@@ -70,3 +70,33 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .text-sm { font-size: 0.82rem; }
 .mt-1 { margin-top: 1rem; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* Rendered markdown */
+.md-content { line-height: 1.7; font-size: 0.92rem; }
+.md-content h1 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+.md-content h2 { font-size: 1.15rem; margin: 1.25rem 0 0.6rem; }
+.md-content h3 { font-size: 1rem; margin: 1rem 0 0.5rem; color: var(--text-dim); }
+.md-content p { margin-bottom: 0.75rem; }
+.md-content ul, .md-content ol { margin: 0.5rem 0 0.75rem 1.5rem; }
+.md-content li { margin-bottom: 0.3rem; }
+.md-content code {
+    background: rgba(108,92,231,0.12); color: var(--accent-hover);
+    padding: 0.15rem 0.4rem; border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace; font-size: 0.84rem;
+}
+.md-content pre {
+    background: #000; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; margin: 0.75rem 0; overflow-x: auto;
+}
+.md-content pre code {
+    background: none; color: #ddd; padding: 0; font-size: 0.82rem;
+}
+.md-content blockquote {
+    border-left: 3px solid var(--accent); padding: 0.5rem 1rem; margin: 0.75rem 0;
+    color: var(--text-dim); background: rgba(108,92,231,0.06);
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+.md-content table { margin: 0.75rem 0; }
+.md-content hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.md-content a { color: var(--accent); }
+.md-content strong { color: #fff; }
