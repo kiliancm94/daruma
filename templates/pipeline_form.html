@@ -2,7 +2,7 @@
 {% block title %}{% if pipeline %}Edit Pipeline{% else %}New Pipeline{% endif %} — Daruma{% endblock %}
 {% block content %}
 <h1>{% if pipeline %}Edit Pipeline{% else %}New Pipeline{% endif %}</h1>
-<form method="post" action="/ui/pipelines{% if pipeline %}/{{ pipeline.id }}{% endif %}" class="card">
+<form method="post" action="/ui/pipelines{% if pipeline %}/{{ pipeline.id }}{% endif %}" class="card" id="pipeline-form">
     <div class="form-group">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" value="{{ pipeline.name if pipeline else '' }}" required>
@@ -12,8 +12,19 @@
         <textarea id="description" name="description">{{ pipeline.description if pipeline and pipeline.description else '' }}</textarea>
     </div>
     <div class="form-group">
-        <label for="steps_text">Steps <span class="text-dim">(one task name per line)</span></label>
-        <textarea id="steps_text" name="steps_text" rows="5" placeholder="my-first-task&#10;my-second-task">{{ steps_text if steps_text else '' }}</textarea>
+        <label>Steps</label>
+        <div class="step-controls">
+            <select id="task-select">
+                <option value="">Select a task…</option>
+                {% for task in all_tasks %}
+                <option value="{{ task.name }}">{{ task.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn btn-primary btn-sm" onclick="addStep()">Add step</button>
+            <a href="/ui/tasks/new" target="_blank" class="btn btn-sm">New Task ↗</a>
+        </div>
+        <div id="step-list" class="step-list"></div>
+        <textarea id="steps_text" name="steps_text" hidden></textarea>
     </div>
     <div class="form-group">
         <label>
@@ -24,4 +35,51 @@
     <button type="submit" class="btn btn-primary">{% if pipeline %}Save{% else %}Create{% endif %}</button>
     <a href="/ui/pipelines/" class="btn">Cancel</a>
 </form>
+
+<script>
+const steps = [];
+const initial = '{{ steps_text | default("", true) }}'.split('\n').filter(s => s.trim());
+initial.forEach(name => steps.push(name));
+renderSteps();
+
+function addStep() {
+    const sel = document.getElementById('task-select');
+    if (!sel.value) return;
+    steps.push(sel.value);
+    sel.value = '';
+    renderSteps();
+}
+
+function removeStep(idx) {
+    steps.splice(idx, 1);
+    renderSteps();
+}
+
+function moveStep(idx, dir) {
+    const target = idx + dir;
+    if (target < 0 || target >= steps.length) return;
+    [steps[idx], steps[target]] = [steps[target], steps[idx]];
+    renderSteps();
+}
+
+function renderSteps() {
+    const list = document.getElementById('step-list');
+    document.getElementById('steps_text').value = steps.join('\n');
+    if (!steps.length) {
+        list.innerHTML = '<div class="text-dim text-sm" style="padding:0.75rem;">No steps added yet.</div>';
+        return;
+    }
+    list.innerHTML = steps.map((name, i) => `
+        <div class="step-item">
+            <span class="step-num">${i + 1}</span>
+            <span class="step-name">${name}</span>
+            <span class="step-actions">
+                <button type="button" class="btn btn-sm" onclick="moveStep(${i},-1)" ${i === 0 ? 'disabled' : ''}>↑</button>
+                <button type="button" class="btn btn-sm" onclick="moveStep(${i},1)" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeStep(${i})">✕</button>
+            </span>
+        </div>
+    `).join('');
+}
+</script>
 {% endblock %}
