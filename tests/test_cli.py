@@ -480,7 +480,7 @@ class TestServiceCommands:
             mock_run.return_value = MagicMock(returncode=0, stderr="")
             result = runner.invoke(cli, ["service", "install"])
             assert result.exit_code == 0
-            assert mock_run.call_count == 2  # unload + load
+            assert mock_run.call_count == 3  # git rev-parse + unload + load
 
     def test_service_uninstall(self, runner, tmp_path):
         plist_path = tmp_path / "com.daruma.server.plist"
