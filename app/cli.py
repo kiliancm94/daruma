@@ -2,12 +2,13 @@
 
 import json
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
 
-from app.config import DB_PATH
+from app.config import DB_PATH, PORT, HOST, HOSTNAME
 from app.utils.env_vars import parse_env_pairs
 from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
@@ -41,6 +42,19 @@ def _connect():
 @click.group()
 def cli():
     """Daruma — Claude automation task runner."""
+
+
+# ── Server ─────────────────────────────────────────────
+
+
+@cli.command("server")
+@click.option("--host", default=HOST, show_default=True, help="Bind address")
+@click.option("--port", default=PORT, show_default=True, help="Bind port")
+def server(host, port):
+    """Start the Daruma web server."""
+    import uvicorn
+
+    uvicorn.run("app.main:app", host=host, port=port)
 
 
 # ── Tasks ──────────────────────────────────────────────
@@ -710,6 +724,235 @@ def run_task(task_name_or_id):
     )
     if result.status != "success":
         sys.exit(1)
+
+
+# ── Service ─────────────────────────────────────────────
+
+
+PLIST_LABEL = "com.daruma.server"
+PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
+HOSTS_FILE = Path("/etc/hosts")
+HOSTS_MARKER = f"# daruma-managed: {HOSTNAME}"
+PFCTL_ANCHOR = "com.daruma"
+PFCTL_ANCHOR_FILE = Path("/etc/pf.anchors") / PFCTL_ANCHOR
+
+
+def _build_plist(host: str, port: int) -> str:
+    """Generate launchd plist XML for the Daruma server."""
+    project_dir = Path(__file__).resolve().parent.parent
+    daruma_bin = project_dir / ".venv" / "bin" / "daruma"
+    log_dir = project_dir / "data"
+    return f"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{PLIST_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{daruma_bin}</string>
+        <string>server</string>
+        <string>--host</string>
+        <string>{host}</string>
+        <string>--port</string>
+        <string>{port}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{project_dir}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{log_dir / "server.log"}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_dir / "server.err"}</string>
+</dict>
+</plist>
+"""
+
+
+def _add_hosts_entry(host: str) -> bool:
+    """Add daruma.local to /etc/hosts. Returns True if added, False if already present."""
+    content = HOSTS_FILE.read_text()
+    if HOSTS_MARKER in content:
+        return False
+    line = f"{host}\t{HOSTNAME}  {HOSTS_MARKER}\n"
+    import subprocess
+
+    result = subprocess.run(
+        ["sudo", "tee", "-a", str(HOSTS_FILE)],
+        input=line,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _remove_hosts_entry() -> bool:
+    """Remove daruma.local from /etc/hosts. Returns True if removed."""
+    content = HOSTS_FILE.read_text()
+    if HOSTS_MARKER not in content:
+        return False
+    lines = [line for line in content.splitlines(True) if HOSTS_MARKER not in line]
+    import subprocess
+
+    result = subprocess.run(
+        ["sudo", "tee", str(HOSTS_FILE)],
+        input="".join(lines),
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _add_pfctl_redirect(port: int) -> bool:
+    """Set up pfctl port-forwarding: 80 → server port on lo0."""
+    import subprocess
+
+    rule = f"rdr pass on lo0 proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port {port}\n"
+    # Write anchor file
+    result = subprocess.run(
+        ["sudo", "tee", str(PFCTL_ANCHOR_FILE)],
+        input=rule,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+
+    # Register anchor in pf.conf if not already present
+    pf_conf = Path("/etc/pf.conf")
+    pf_content = pf_conf.read_text()
+    anchor_line = f'rdr-anchor "{PFCTL_ANCHOR}"'
+    load_line = f'load anchor "{PFCTL_ANCHOR}" from "{PFCTL_ANCHOR_FILE}"'
+    if anchor_line not in pf_content:
+        addition = f"{anchor_line}\n{load_line}\n"
+        subprocess.run(
+            ["sudo", "tee", "-a", str(pf_conf)],
+            input=addition,
+            capture_output=True,
+            text=True,
+        )
+
+    # Reload pf rules
+    subprocess.run(["sudo", "pfctl", "-ef", str(pf_conf)], capture_output=True)
+    return True
+
+
+def _remove_pfctl_redirect() -> bool:
+    """Remove pfctl port-forwarding rules."""
+    import subprocess
+
+    if not PFCTL_ANCHOR_FILE.exists():
+        return False
+
+    # Remove anchor file
+    subprocess.run(["sudo", "rm", str(PFCTL_ANCHOR_FILE)], capture_output=True)
+
+    # Remove anchor lines from pf.conf
+    pf_conf = Path("/etc/pf.conf")
+    pf_content = pf_conf.read_text()
+    lines = [line for line in pf_content.splitlines(True) if PFCTL_ANCHOR not in line]
+    subprocess.run(
+        ["sudo", "tee", str(pf_conf)],
+        input="".join(lines),
+        capture_output=True,
+        text=True,
+    )
+
+    # Reload pf rules
+    subprocess.run(["sudo", "pfctl", "-ef", str(pf_conf)], capture_output=True)
+    return True
+
+
+@cli.group()
+def service():
+    """Manage the Daruma macOS background service."""
+
+
+@service.command("install")
+@click.option("--host", default=HOST, show_default=True, help="Bind address")
+@click.option("--port", default=PORT, show_default=True, help="Bind port")
+def service_install(host, port):
+    """Install and start the Daruma launchd agent."""
+    import subprocess
+
+    plist_content = _build_plist(host, port)
+    PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    if PLIST_PATH.exists():
+        subprocess.run(
+            ["launchctl", "unload", str(PLIST_PATH)],
+            capture_output=True,
+        )
+
+    PLIST_PATH.write_text(plist_content)
+    result = subprocess.run(
+        ["launchctl", "load", str(PLIST_PATH)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        click.echo(f"Failed to load service: {result.stderr}", err=True)
+        raise SystemExit(1)
+
+    if _add_hosts_entry(host):
+        click.echo(f"Added {HOSTNAME} to /etc/hosts")
+    else:
+        click.echo(f"{HOSTNAME} already in /etc/hosts")
+
+    if _add_pfctl_redirect(port):
+        click.echo(f"Port forwarding: http://{HOSTNAME} -> :{port}")
+    else:
+        click.echo("Failed to set up port forwarding", err=True)
+
+    click.echo(f"Service installed and started — http://{HOSTNAME}")
+    click.echo(f"Plist: {PLIST_PATH}")
+
+
+@service.command("uninstall")
+def service_uninstall():
+    """Stop and remove the Daruma launchd agent."""
+    import subprocess
+
+    if not PLIST_PATH.exists():
+        click.echo("Service not installed.")
+        return
+    subprocess.run(
+        ["launchctl", "unload", str(PLIST_PATH)],
+        capture_output=True,
+    )
+    PLIST_PATH.unlink()
+
+    if _remove_hosts_entry():
+        click.echo(f"Removed {HOSTNAME} from /etc/hosts")
+
+    if _remove_pfctl_redirect():
+        click.echo("Removed port forwarding rule")
+
+    click.echo("Service stopped and removed.")
+
+
+@service.command("status")
+def service_status():
+    """Check whether the Daruma service is running."""
+    import subprocess
+
+    result = subprocess.run(
+        ["launchctl", "list", PLIST_LABEL],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        click.echo("Service is not running.")
+        if not PLIST_PATH.exists():
+            click.echo("(Not installed)")
+        raise SystemExit(1)
+    for line in result.stdout.strip().splitlines():
+        click.echo(line)
 
 
 # ── Helpers ────────────────────────────────────────────

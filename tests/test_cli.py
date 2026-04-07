@@ -1,9 +1,9 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 from click.testing import CliRunner
 
-from app.cli import cli
+from app.cli import cli, _build_plist, PLIST_LABEL, HOSTS_MARKER
 
 
 @pytest.fixture
@@ -437,3 +437,145 @@ class TestPipelineCommands:
         result = runner.invoke(cli, ["pipelines", "show", "nope"])
         assert result.exit_code == 1
         assert "Pipeline not found" in result.output
+
+
+class TestServerCommand:
+    def test_server_help(self, runner):
+        result = runner.invoke(cli, ["server", "--help"])
+        assert result.exit_code == 0
+        assert "--host" in result.output
+        assert "--port" in result.output
+
+
+class TestServiceCommands:
+    def test_build_plist_contains_label(self):
+        xml = _build_plist("127.0.0.1", 9090)
+        assert PLIST_LABEL in xml
+        assert "<string>server</string>" in xml
+        assert "<string>127.0.0.1</string>" in xml
+        assert "<string>9090</string>" in xml
+        assert "<true/>" in xml  # RunAtLoad + KeepAlive
+
+    def test_service_install(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        hosts_file = tmp_path / "hosts"
+        hosts_file.write_text("127.0.0.1\tlocalhost\n")
+        anchor_file = tmp_path / "com.daruma"
+        pf_conf = tmp_path / "pf.conf"
+        pf_conf.write_text("")
+        with (
+            patch("app.cli.PLIST_PATH", plist_path),
+            patch("app.cli.HOSTS_FILE", hosts_file),
+            patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file),
+            patch("app.cli._add_pfctl_redirect") as mock_pfctl,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            mock_pfctl.return_value = True
+            result = runner.invoke(cli, ["service", "install"])
+            assert result.exit_code == 0
+            assert "Service installed" in result.output
+            assert "http://daruma.local" in result.output
+            assert plist_path.exists()
+            assert PLIST_LABEL in plist_path.read_text()
+
+    def test_service_install_replaces_existing(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        plist_path.write_text("old content")
+        hosts_file = tmp_path / "hosts"
+        hosts_file.write_text(f"127.0.0.1\tdaruma.local  {HOSTS_MARKER}\n")
+        with (
+            patch("app.cli.PLIST_PATH", plist_path),
+            patch("app.cli.HOSTS_FILE", hosts_file),
+            patch("app.cli._add_pfctl_redirect") as mock_pfctl,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            mock_pfctl.return_value = True
+            result = runner.invoke(cli, ["service", "install"])
+            assert result.exit_code == 0
+            assert "already in" in result.output
+
+    def test_service_uninstall(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        plist_path.write_text("some plist")
+        hosts_file = tmp_path / "hosts"
+        hosts_file.write_text(
+            f"127.0.0.1\tlocalhost\n127.0.0.1\tdaruma.local  {HOSTS_MARKER}\n"
+        )
+        with (
+            patch("app.cli.PLIST_PATH", plist_path),
+            patch("app.cli.HOSTS_FILE", hosts_file),
+            patch("app.cli._remove_pfctl_redirect") as mock_pfctl,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            mock_pfctl.return_value = True
+            result = runner.invoke(cli, ["service", "uninstall"])
+            assert result.exit_code == 0
+            assert "stopped and removed" in result.output
+            assert "Removed port forwarding" in result.output
+            assert not plist_path.exists()
+
+    def test_service_uninstall_not_installed(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        with patch("app.cli.PLIST_PATH", plist_path):
+            result = runner.invoke(cli, ["service", "uninstall"])
+            assert result.exit_code == 0
+            assert "not installed" in result.output
+
+    def test_service_status_not_running(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        with (
+            patch("app.cli.PLIST_PATH", plist_path),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+            result = runner.invoke(cli, ["service", "status"])
+            assert result.exit_code == 1
+            assert "not running" in result.output
+            assert "Not installed" in result.output
+
+    def test_service_status_running(self, runner, tmp_path):
+        plist_path = tmp_path / "com.daruma.server.plist"
+        plist_path.write_text("plist")
+        with (
+            patch("app.cli.PLIST_PATH", plist_path),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=f'"{PLIST_LABEL}" = {{\n\tPID = 12345;\n}};',
+            )
+            result = runner.invoke(cli, ["service", "status"])
+            assert result.exit_code == 0
+            assert "PID" in result.output
+
+    def test_pfctl_redirect_creates_anchor(self, tmp_path):
+        from app.cli import _add_pfctl_redirect
+
+        anchor_file = tmp_path / "com.daruma"
+        pf_conf = tmp_path / "pf.conf"
+        pf_conf.write_text("# default pf.conf\n")
+        with (
+            patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file),
+            patch("app.cli.Path") as mock_path_cls,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_path_cls.return_value = pf_conf
+            mock_run.return_value = MagicMock(returncode=0)
+            # Mock Path("/etc/pf.conf") to return our tmp pf_conf
+            result = _add_pfctl_redirect(9090)
+            assert result is True
+            # Verify sudo tee was called with the anchor content
+            first_call_args = mock_run.call_args_list[0]
+            assert "tee" in first_call_args[0][0]
+            assert "9090" in first_call_args[1].get("input", "")
+
+    def test_pfctl_remove_when_no_anchor(self, tmp_path):
+        from app.cli import _remove_pfctl_redirect
+
+        anchor_file = tmp_path / "com.daruma"
+        with patch("app.cli.PFCTL_ANCHOR_FILE", anchor_file):
+            result = _remove_pfctl_redirect()
+            assert result is False
