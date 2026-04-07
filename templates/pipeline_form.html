@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if pipeline %}Edit Pipeline{% else %}New Pipeline{% endif %} — Daruma{% endblock %}
+{% block content %}
+<h1>{% if pipeline %}Edit Pipeline{% else %}New Pipeline{% endif %}</h1>
+<form method="post" action="/ui/pipelines{% if pipeline %}/{{ pipeline.id }}{% endif %}" class="card">
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ pipeline.name if pipeline else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label for="description">Description <span class="text-dim">(optional)</span></label>
+        <textarea id="description" name="description">{{ pipeline.description if pipeline and pipeline.description else '' }}</textarea>
+    </div>
+    <div class="form-group">
+        <label for="steps_text">Steps <span class="text-dim">(one task name per line)</span></label>
+        <textarea id="steps_text" name="steps_text" rows="5" placeholder="my-first-task&#10;my-second-task">{{ steps_text if steps_text else '' }}</textarea>
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="enabled" value="1" {{ 'checked' if not pipeline or pipeline.enabled }}>
+            Enabled
+        </label>
+    </div>
+    <button type="submit" class="btn btn-primary">{% if pipeline %}Save{% else %}Create{% endif %}</button>
+    <a href="/ui/pipelines/" class="btn">Cancel</a>
+</form>
+{% endblock %}

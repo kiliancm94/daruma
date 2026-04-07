@@ -11,6 +11,7 @@ from app.models.base import Base
 from app.utils.date_helpers import utcnow
 
 if TYPE_CHECKING:
+    from app.models.pipeline_run import PipelineRun
     from app.models.task import Task
 
 
@@ -32,5 +33,11 @@ class Run(Base):
     stderr: Mapped[str | None] = mapped_column(Text, nullable=True)
     exit_code: Mapped[int | None] = mapped_column(nullable=True)
     activity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pipeline_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pipeline_runs.id"), nullable=True
+    )
 
     task: Mapped["Task"] = relationship(back_populates="runs")
+    pipeline_run: Mapped["PipelineRun | None"] = relationship(
+        back_populates="step_runs"
+    )

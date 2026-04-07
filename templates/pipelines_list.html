@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Pipelines — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>Pipelines</h1>
+    <a href="/ui/pipelines/new" class="btn btn-primary">New Pipeline</a>
+</div>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Steps</th><th>Status</th><th>Last Run</th></tr>
+    </thead>
+    <tbody>
+        {% for pipeline in pipelines %}
+        <tr>
+            <td><a href="/ui/pipelines/{{ pipeline.id }}">{{ pipeline.name }}</a></td>
+            <td class="text-dim text-sm">{{ pipeline.steps_count }}</td>
+            <td>
+                {% if pipeline.enabled %}
+                    <span class="badge badge-success">enabled</span>
+                {% else %}
+                    <span class="badge badge-dim">disabled</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if pipeline.last_run %}
+                    {% if pipeline.last_run.status == "success" %}
+                        <span class="badge badge-success">success</span>
+                    {% elif pipeline.last_run.status == "failed" %}
+                        <span class="badge badge-danger">failed</span>
+                    {% else %}
+                        <span class="badge badge-warning">running</span>
+                    {% endif %}
+                    <span class="text-dim text-sm">{{ (pipeline.last_run.duration_ms / 1000)|round(1) if pipeline.last_run.duration_ms else "—" }}s</span>
+                {% else %}
+                    <span class="text-dim text-sm">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not pipelines %}
+            <tr><td colspan="4" class="text-dim text-sm" style="text-align:center; padding:2rem;">
+                No pipelines found.
+            </td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

@@ -12,6 +12,8 @@ from app.models.task import Task  # noqa: F401 — register with Base.metadata
 from app.models.run import Run  # noqa: F401
 from app.models.skill import Skill  # noqa: F401
 from app.models.task_skill import TaskSkill  # noqa: F401
+from app.models.pipeline import Pipeline, PipelineStep  # noqa: F401
+from app.models.pipeline_run import PipelineRun  # noqa: F401
 
 config = context.config
 

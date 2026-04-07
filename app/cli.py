@@ -19,11 +19,16 @@ from app.services import (
     TaskService,
     RunService,
     SkillService,
+    PipelineService,
     TaskNotFoundError,
     RunNotFoundError,
+    PipelineNotFoundError,
     execute_task,
+    execute_pipeline,
     _parse_skill_frontmatter,
 )
+from app.schemas.pipeline import PipelineTrigger
+from app.schemas.pipeline import PipelineResponse
 
 console = Console()
 
@@ -486,6 +491,188 @@ def sync_skills():
     )
 
 
+# ── Pipelines ──────────────────────────────────────────
+
+
+@cli.group()
+def pipelines():
+    """Manage pipelines."""
+
+
+@pipelines.command("list")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def list_pipelines(as_json):
+    """List all pipelines."""
+    session = _connect()
+    pipeline_service = PipelineService(session)
+    items = pipeline_service.list()
+    if not items:
+        session.close()
+        click.echo("No pipelines found.")
+        return
+    if as_json:
+        data = [PipelineResponse.model_validate(p).model_dump() for p in items]
+        session.close()
+        console.print_json(data=data)
+        return
+    table = Table(show_edge=False, pad_edge=False)
+    table.add_column("ID", style="dim", max_width=8)
+    table.add_column("Name")
+    table.add_column("Steps", style="cyan")
+    table.add_column("Status")
+    for pipeline in items:
+        status = "[green]enabled[/green]" if pipeline.enabled else "[red]disabled[/red]"
+        table.add_row(pipeline.id[:8], pipeline.name, str(len(pipeline.steps)), status)
+    session.close()
+    console.print(table)
+
+
+@pipelines.command("create")
+@click.option("--name", required=True, help="Pipeline name")
+@click.option("--steps", required=True, help="Comma-separated task names")
+@click.option("--description", default=None, help="Pipeline description")
+def create_pipeline(name, steps, description):
+    """Create a new pipeline."""
+    session = _connect()
+    task_service = TaskService(session)
+    task_names = [n.strip() for n in steps.split(",") if n.strip()]
+    task_ids = []
+    for task_name in task_names:
+        try:
+            task = task_service.get_by_name(task_name)
+        except TaskNotFoundError:
+            click.echo(f"Task not found: {task_name}", err=True)
+            session.close()
+            raise SystemExit(1)
+        task_ids.append(task.id)
+    pipeline_service = PipelineService(session)
+    pipeline = pipeline_service.create(
+        name=name,
+        description=description,
+        task_ids=task_ids,
+    )
+    session.close()
+    click.echo(f"Created pipeline: {pipeline.name} ({pipeline.id[:8]})")
+
+
+@pipelines.command("show")
+@click.argument("name_or_id")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def show_pipeline(name_or_id, as_json):
+    """Show pipeline details. Accepts full ID, partial ID, or name."""
+    session = _connect()
+    pipeline_service = PipelineService(session)
+    task_service = TaskService(session)
+    pipeline = _resolve_pipeline(pipeline_service, name_or_id)
+    if as_json:
+        data = PipelineResponse.model_validate(pipeline).model_dump()
+        session.close()
+        console.print_json(data=data)
+        return
+    click.echo(f"ID:          {pipeline.id}")
+    click.echo(f"Name:        {pipeline.name}")
+    click.echo(f"Description: {pipeline.description or 'none'}")
+    click.echo(f"Enabled:     {pipeline.enabled}")
+    click.echo("Steps:")
+    for i, step in enumerate(sorted(pipeline.steps, key=lambda s: s.step_order), 1):
+        try:
+            task = task_service.get(step.task_id)
+            task_name = task.name
+        except TaskNotFoundError:
+            task_name = f"(unknown: {step.task_id[:8]})"
+        click.echo(f"  {i}. {task_name}")
+    click.echo(f"Created:     {pipeline.created_at}")
+    click.echo(f"Updated:     {pipeline.updated_at}")
+    session.close()
+
+
+@pipelines.command("edit")
+@click.argument("name_or_id")
+@click.option("--name", default=None, help="New pipeline name")
+@click.option("--description", default=None, help="New description")
+@click.option("--steps", default=None, help="Comma-separated task names")
+@click.option("--enable/--disable", default=None)
+def edit_pipeline(name_or_id, name, description, steps, enable):
+    """Update a pipeline."""
+    session = _connect()
+    pipeline_service = PipelineService(session)
+    pipeline = _resolve_pipeline(pipeline_service, name_or_id)
+    pipeline_name = pipeline.name
+    pipeline_pk = pipeline.id
+
+    if steps is not None:
+        task_service = TaskService(session)
+        task_names = [n.strip() for n in steps.split(",") if n.strip()]
+        task_ids = []
+        for task_name in task_names:
+            try:
+                task = task_service.get_by_name(task_name)
+            except TaskNotFoundError:
+                click.echo(f"Task not found: {task_name}", err=True)
+                session.close()
+                raise SystemExit(1)
+            task_ids.append(task.id)
+        pipeline_service.update_steps(pipeline_pk, task_ids)
+
+    fields = {}
+    if name is not None:
+        fields["name"] = name
+    if description is not None:
+        fields["description"] = description
+    if enable is not None:
+        fields["enabled"] = enable
+
+    if not fields and steps is None:
+        click.echo("Nothing to update.")
+        return
+
+    if fields:
+        updated = pipeline_service.update(pipeline_pk, **fields)
+        pipeline_name = updated.name
+
+    session.close()
+    click.echo(f"Updated pipeline: {pipeline_name} ({pipeline_pk[:8]})")
+
+
+@pipelines.command("delete")
+@click.argument("name_or_id")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def delete_pipeline(name_or_id, yes):
+    """Delete a pipeline."""
+    session = _connect()
+    pipeline_service = PipelineService(session)
+    pipeline = _resolve_pipeline(pipeline_service, name_or_id)
+    if not yes:
+        click.confirm(f"Delete pipeline '{pipeline.name}'?", abort=True)
+    pipeline_service.delete(pipeline.id)
+    session.close()
+    click.echo(f"Deleted pipeline: {pipeline.name}")
+
+
+@pipelines.command("run")
+@click.argument("name_or_id")
+def run_pipeline(name_or_id):
+    """Run a pipeline now (blocks until complete, streams step output)."""
+    session = _connect()
+    pipeline_service = PipelineService(session)
+    pipeline = _resolve_pipeline(pipeline_service, name_or_id)
+
+    steps = sorted(pipeline.steps, key=lambda s: s.step_order)
+    total = len(steps)
+    click.echo(f"Running pipeline: {pipeline.name} ({total} steps)\n")
+
+    result = execute_pipeline(
+        pipeline,
+        session,
+        trigger=PipelineTrigger.manual,
+    )
+    session.close()
+
+    click.echo(f"\nPipeline: {result.status}  Duration: {result.duration_ms}ms")
+    if result.status != "success":
+        sys.exit(1)
+
+
 # ── Run (execute) ─────────────────────────────────────
 
 
@@ -548,4 +735,27 @@ def _resolve_task(task_service: TaskService, identifier: str):
             click.echo(f"  {t.id}  {t.name}", err=True)
         raise SystemExit(1)
     click.echo(f"Task not found: {identifier}", err=True)
+    raise SystemExit(1)
+
+
+def _resolve_pipeline(pipeline_service: PipelineService, identifier: str):
+    """Resolve a pipeline by full ID, partial ID (prefix), or name."""
+    try:
+        return pipeline_service.get(identifier)
+    except PipelineNotFoundError:
+        pass
+    try:
+        return pipeline_service.get_by_name(identifier)
+    except PipelineNotFoundError:
+        pass
+    all_pipelines = pipeline_service.list()
+    matches = [p for p in all_pipelines if p.id.startswith(identifier)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        click.echo(f"Ambiguous ID prefix '{identifier}', matches:", err=True)
+        for p in matches:
+            click.echo(f"  {p.id}  {p.name}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Pipeline not found: {identifier}", err=True)
     raise SystemExit(1)
