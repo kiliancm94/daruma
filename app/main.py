@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import DB_PATH
@@ -75,6 +76,11 @@ app.include_router(ui_router.router)
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/ui/")
 
 
 @app.get("/health")
