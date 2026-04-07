@@ -321,11 +321,15 @@ def pipelines_list(
 
 
 @router.get("/pipelines/new", response_class=HTMLResponse)
-def pipeline_form_new(request: Request):
+def pipeline_form_new(
+    request: Request,
+    task_service: TaskService = Depends(get_task_service),
+):
+    all_tasks = [{"id": t.id, "name": t.name} for t in task_service.list()]
     return templates.TemplateResponse(
         request,
         "pipeline_form.html",
-        {"pipeline": None, "steps_text": ""},
+        {"pipeline": None, "steps_text": "", "all_tasks": all_tasks},
     )
 
 
@@ -372,16 +376,18 @@ def pipeline_edit_form(
     request: Request,
     pipeline_id: str,
     pipeline_service: PipelineService = Depends(get_pipeline_service),
+    task_service: TaskService = Depends(get_task_service),
 ):
     try:
         pipeline = pipeline_service.get(pipeline_id)
     except PipelineNotFoundError:
         raise HTTPException(404, "Pipeline not found")
     steps_text = "\n".join(step.task.name for step in pipeline.steps)
+    all_tasks = [{"id": t.id, "name": t.name} for t in task_service.list()]
     return templates.TemplateResponse(
         request,
         "pipeline_form.html",
-        {"pipeline": pipeline, "steps_text": steps_text},
+        {"pipeline": pipeline, "steps_text": steps_text, "all_tasks": all_tasks},
     )
 
 
