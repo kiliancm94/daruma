@@ -38,7 +38,7 @@
 
 <script>
 const steps = [];
-const initial = '{{ steps_text | default("", true) }}'.split('\n').filter(s => s.trim());
+const initial = {{ steps_text | default("", true) | tojson }}.split('\n').filter(s => s.trim());
 initial.forEach(name => steps.push(name));
 renderSteps();
 
