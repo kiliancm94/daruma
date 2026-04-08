@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -7,6 +8,25 @@ from typing import Callable
 
 VALID_MODELS = ("sonnet", "opus", "haiku")
 DEFAULT_MODEL = "sonnet"
+
+def _find_claude() -> str:
+    """Resolve claude CLI binary, searching common install paths for launchd contexts."""
+    found = shutil.which("claude")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    for candidate in [
+        os.path.join(home, ".local", "bin", "claude"),
+        os.path.join(home, ".claude", "local", "claude"),
+        "/usr/local/bin/claude",
+        "/opt/homebrew/bin/claude",
+    ]:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return "claude"
+
+
+_CLAUDE_BIN = _find_claude()
 
 VALID_TOOLS = frozenset(
     {
@@ -83,7 +103,7 @@ def run_claude(
     env_vars: dict[str, str] | None = None,
 ) -> dict:
     cmd = [
-        "claude",
+        _CLAUDE_BIN,
         "-p",
         "--permission-mode",
         "auto",

@@ -1,5 +1,6 @@
 import io
 import json
+import os
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -93,7 +94,7 @@ def test_run_claude_success(mock_popen):
     assert result["stdout"] == "Hello from Claude"
     assert result["stderr"] == ""
     cmd = mock_popen.call_args[0][0]
-    assert cmd[0] == "claude"
+    assert os.path.basename(cmd[0]) == "claude"
     assert "-p" in cmd
     assert "--output-format" in cmd
     assert "--model" in cmd
