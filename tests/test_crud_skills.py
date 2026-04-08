@@ -15,7 +15,6 @@ class TestSkillCrud:
             content="# Jira Skill\n\nUse jira CLI.",
         )
         assert skill.name == "jira"
-        assert skill.source == "local"
 
         fetched = skill_crud.get(db_session, skill.id)
         assert fetched is not None
@@ -52,32 +51,27 @@ class TestSkillCrud:
 class TestTaskSkillCrud:
     def test_assign_and_list(self, db_session):
         task = task_crud.create(db_session, name="T", prompt="p")
-        skill = skill_crud.create(db_session, name="s", description="d", content="c")
-        task_skill_crud.assign(db_session, task.id, skill.id)
-        skills = task_skill_crud.list_for_task(db_session, task.id)
-        assert len(skills) == 1
-        assert skills[0].id == skill.id
+        task_skill_crud.assign(db_session, task.id, "my-skill")
+        names = task_skill_crud.list_for_task(db_session, task.id)
+        assert len(names) == 1
+        assert names[0] == "my-skill"
 
     def test_assign_idempotent(self, db_session):
         task = task_crud.create(db_session, name="T", prompt="p")
-        skill = skill_crud.create(db_session, name="s", description="d", content="c")
-        task_skill_crud.assign(db_session, task.id, skill.id)
-        task_skill_crud.assign(db_session, task.id, skill.id)
+        task_skill_crud.assign(db_session, task.id, "s")
+        task_skill_crud.assign(db_session, task.id, "s")
         assert len(task_skill_crud.list_for_task(db_session, task.id)) == 1
 
     def test_unassign(self, db_session):
         task = task_crud.create(db_session, name="T", prompt="p")
-        skill = skill_crud.create(db_session, name="s", description="d", content="c")
-        task_skill_crud.assign(db_session, task.id, skill.id)
-        task_skill_crud.unassign(db_session, task.id, skill.id)
+        task_skill_crud.assign(db_session, task.id, "s")
+        task_skill_crud.unassign(db_session, task.id, "s")
         assert len(task_skill_crud.list_for_task(db_session, task.id)) == 0
 
     def test_replace(self, db_session):
         task = task_crud.create(db_session, name="T", prompt="p")
-        s1 = skill_crud.create(db_session, name="a", description="d", content="c")
-        s2 = skill_crud.create(db_session, name="b", description="d", content="c")
-        task_skill_crud.assign(db_session, task.id, s1.id)
-        task_skill_crud.replace(db_session, task.id, [s2.id])
-        skills = task_skill_crud.list_for_task(db_session, task.id)
-        assert len(skills) == 1
-        assert skills[0].id == s2.id
+        task_skill_crud.assign(db_session, task.id, "a")
+        task_skill_crud.replace(db_session, task.id, ["b"])
+        names = task_skill_crud.list_for_task(db_session, task.id)
+        assert len(names) == 1
+        assert names[0] == "b"

@@ -39,9 +39,8 @@ def test_list_skills(client):
 
 
 def test_get_skill(client):
-    create = client.post("/api/skills", json={"name": "x", "content": "c"})
-    skill_id = create.json()["id"]
-    resp = client.get(f"/api/skills/{skill_id}")
+    client.post("/api/skills", json={"name": "x", "content": "c"})
+    resp = client.get("/api/skills/x")
     assert resp.status_code == 200
     assert resp.json()["name"] == "x"
 
@@ -52,17 +51,15 @@ def test_get_skill_not_found(client):
 
 
 def test_update_skill(client):
-    create = client.post("/api/skills", json={"name": "y", "content": "old"})
-    skill_id = create.json()["id"]
-    resp = client.put(f"/api/skills/{skill_id}", json={"content": "new"})
+    client.post("/api/skills", json={"name": "y", "content": "old"})
+    resp = client.put("/api/skills/y", json={"content": "new"})
     assert resp.status_code == 200
     assert resp.json()["content"] == "new"
 
 
 def test_delete_skill(client):
-    create = client.post("/api/skills", json={"name": "z", "content": "c"})
-    skill_id = create.json()["id"]
-    resp = client.delete(f"/api/skills/{skill_id}")
+    client.post("/api/skills", json={"name": "z", "content": "c"})
+    resp = client.delete("/api/skills/z")
     assert resp.status_code == 204
 
 
@@ -70,9 +67,8 @@ def test_assign_skills_to_task(client, db_session):
     from app.crud import tasks as task_crud
 
     task = task_crud.create(db_session, name="T", prompt="p")
-    create = client.post("/api/skills", json={"name": "s", "content": "c"})
-    skill_id = create.json()["id"]
-    resp = client.put(f"/api/tasks/{task.id}/skills", json={"skill_ids": [skill_id]})
+    client.post("/api/skills", json={"name": "s", "content": "c"})
+    resp = client.put(f"/api/tasks/{task.id}/skills", json={"skill_names": ["s"]})
     assert resp.status_code == 200
 
     resp = client.get(f"/api/tasks/{task.id}/skills")

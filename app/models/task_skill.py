@@ -12,6 +12,4 @@ class TaskSkill(Base):
     task_id: Mapped[str] = mapped_column(
         String, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
     )
-    skill_id: Mapped[str] = mapped_column(
-        String, ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True
-    )
+    skill_name: Mapped[str] = mapped_column(String, primary_key=True)

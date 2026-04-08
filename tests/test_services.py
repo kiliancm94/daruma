@@ -187,10 +187,12 @@ class TestExecuteTask:
         from app.crud import task_skills as task_skill_crud
 
         task = task_svc.create(name="T", prompt="p")
-        skill = skill_crud.create(
+        # Create a local skill in DB
+        skill_crud.create(
             db_session, name="jira", description="d", content="# Jira\nUse jira CLI"
         )
-        task_skill_crud.assign(db_session, task.id, skill.id)
+        # Assign by name
+        task_skill_crud.assign(db_session, task.id, "jira")
 
         mock_runner = MagicMock(
             return_value={
@@ -203,7 +205,6 @@ class TestExecuteTask:
         execute_task(task, db_session, runner=mock_runner)
         call_kwargs = mock_runner.call_args
         assert "system_prompt" in call_kwargs.kwargs or (len(call_kwargs.args) > 3)
-        # Check system_prompt was passed
         if call_kwargs.kwargs.get("system_prompt"):
             assert "Jira" in call_kwargs.kwargs["system_prompt"]
 
@@ -229,39 +230,66 @@ class TestExecuteTaskBg:
 
 
 class TestSkillService:
-    def test_create(self, db_session):
+    def test_create_local(self, db_session):
         svc = SkillService(db_session)
-        skill = svc.create(name="test", description="d", content="c")
-        assert skill.name == "test"
-        assert skill.source == "local"
+        result = svc.create(name="test", description="d", content="c")
+        assert result["name"] == "test"
+        assert result["source"] == "local"
+
+    def test_create_global(self, tmp_path, db_session):
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            (tmp_path / "skills").mkdir()
+            result = svc.create(name="g", description="d", content="c", source="global")
+        assert result["name"] == "g"
+        assert result["source"] == "global"
+        assert (tmp_path / "skills" / "g" / "SKILL.md").exists()
+
+    def test_create_name_collision_global_exists(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "taken"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: taken\ndescription: d\n---\nc")
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            with pytest.raises(ValueError, match="already taken"):
+                svc.create(name="taken", description="d", content="c")
+
+    def test_create_name_collision_local_exists(self, tmp_path, db_session):
+        svc = SkillService(db_session)
+        svc.create(name="taken", description="d", content="c")
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            (tmp_path / "skills").mkdir()
+            with pytest.raises(ValueError, match="already taken"):
+                svc.create(name="taken", description="d", content="c", source="global")
+
+    def test_resolve_global_first(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "s"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: s\ndescription: Global\n---\n# Global"
+        )
+        svc = SkillService(db_session)
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            result = svc.resolve("s")
+        assert result["source"] == "global"
+
+    def test_resolve_falls_back_to_local(self, db_session):
+        svc = SkillService(db_session)
+        svc.create(name="loc", description="d", content="c")
+        result = svc.resolve("loc")
+        assert result["source"] == "local"
+
+    def test_resolve_not_found(self, db_session):
+        svc = SkillService(db_session)
+        with pytest.raises(SkillNotFoundError):
+            svc.resolve("nonexistent")
 
     def test_list_local(self, db_session):
         svc = SkillService(db_session)
         svc.create(name="a", description="d", content="c")
-        assert len(svc.list_local()) == 1
-
-    def test_get(self, db_session):
-        svc = SkillService(db_session)
-        skill = svc.create(name="x", description="d", content="c")
-        assert svc.get(skill.id).name == "x"
-
-    def test_get_not_found(self, db_session):
-        svc = SkillService(db_session)
-        with pytest.raises(SkillNotFoundError):
-            svc.get("nonexistent")
-
-    def test_update(self, db_session):
-        svc = SkillService(db_session)
-        skill = svc.create(name="old", description="d", content="c")
-        updated = svc.update(skill.id, description="new")
-        assert updated.description == "new"
-
-    def test_delete(self, db_session):
-        svc = SkillService(db_session)
-        skill = svc.create(name="gone", description="d", content="c")
-        svc.delete(skill.id)
-        with pytest.raises(SkillNotFoundError):
-            svc.get(skill.id)
+        result = svc.list_local()
+        assert len(result) == 1
+        assert result[0]["source"] == "local"
 
     def test_list_global(self, tmp_path, db_session):
         skill_dir = tmp_path / "skills" / "my-skill"
@@ -274,7 +302,6 @@ class TestSkillService:
             skills = svc.list_global()
         assert len(skills) == 1
         assert skills[0]["name"] == "my-skill"
-        assert skills[0]["description"] == "A skill"
         assert skills[0]["source"] == "global"
 
     def test_list_global_case_insensitive(self, tmp_path, db_session):
@@ -288,7 +315,7 @@ class TestSkillService:
             skills = svc.list_global()
         assert len(skills) == 1
 
-    def test_list_all_after_sync(self, tmp_path, db_session):
+    def test_list_all_merged(self, tmp_path, db_session):
         skill_dir = tmp_path / "skills" / "ext"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -297,49 +324,44 @@ class TestSkillService:
         svc = SkillService(db_session)
         svc.create(name="local", description="d", content="c")
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
-            svc.sync_global()
             all_skills = svc.list_all()
         assert len(all_skills) == 2
+        # Sorted by name
+        assert all_skills[0]["name"] == "ext"
+        assert all_skills[1]["name"] == "local"
 
-    def test_sync_global_creates(self, tmp_path, db_session):
-        skill_dir = tmp_path / "skills" / "new-skill"
+    def test_update_local(self, db_session):
+        svc = SkillService(db_session)
+        svc.create(name="old", description="d", content="c")
+        updated = svc.update("old", description="new")
+        assert updated["description"] == "new"
+
+    def test_update_global(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "g"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
-            "---\nname: new-skill\ndescription: New\n---\n# New"
+            "---\nname: g\ndescription: old\n---\n# Old"
         )
         svc = SkillService(db_session)
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
-            result = svc.sync_global()
-        assert result["created"] == 1
-        assert result["updated"] == 0
+            updated = svc.update("g", description="new")
+        assert updated["description"] == "new"
 
-    def test_sync_global_updates(self, tmp_path, db_session):
+    def test_delete_local(self, db_session):
         svc = SkillService(db_session)
-        svc.create(name="s", description="old", content="old content")
-        skill_dir = tmp_path / "skills" / "s"
+        svc.create(name="gone", description="d", content="c")
+        svc.delete("gone")
+        with pytest.raises(SkillNotFoundError):
+            svc.resolve("gone")
+
+    def test_delete_global(self, tmp_path, db_session):
+        skill_dir = tmp_path / "skills" / "g"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: s\ndescription: new\n---\n# Updated"
-        )
-        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
-            result = svc.sync_global()
-        assert result["updated"] == 1
-        from app.crud import skills as skill_crud
-
-        updated = skill_crud.get_by_name(db_session, "s")
-        assert "Updated" in updated.content
-
-    def test_sync_global_unchanged(self, tmp_path, db_session):
-        content = "---\nname: s\ndescription: d\n---\n# Body"
+        (skill_dir / "SKILL.md").write_text("---\nname: g\ndescription: d\n---\nc")
         svc = SkillService(db_session)
-        skill_dir = tmp_path / "skills" / "s"
-        skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(content)
-        # First sync creates
         with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
-            svc.sync_global()
-            result = svc.sync_global()
-        assert result["unchanged"] == 1
+            svc.delete("g")
+        assert not skill_dir.exists()
 
     def test_list_global_no_dir(self, tmp_path, db_session):
         svc = SkillService(db_session)

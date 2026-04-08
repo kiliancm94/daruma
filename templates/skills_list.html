@@ -11,7 +11,7 @@
         {% for skill in skills %}
         <tr>
             <td>
-                <a href="/ui/skills/{{ skill.id }}">{{ skill.name }}</a>
+                <a href="/ui/skills/{{ skill.name }}">{{ skill.name }}</a>
             </td>
             <td class="text-dim text-sm">{{ skill.description }}</td>
             <td><span class="badge {% if skill.source == 'global' %}badge-dim{% else %}badge-success{% endif %}">{{ skill.source }}</span></td>

@@ -40,8 +40,8 @@
         <div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; padding:0.5rem;">
             {% for skill in all_skills %}
             <label style="display:block; margin-bottom:0.25rem;">
-                <input type="checkbox" name="skill_ids" value="{{ skill.id or skill.name }}"
-                       {{ 'checked' if skill.id in task_skill_ids or skill.name in task_skill_names }}>
+                <input type="checkbox" name="skill_names" value="{{ skill.name }}"
+                       {{ 'checked' if skill.name in task_skill_names }}>
                 {{ skill.name }} <span class="text-dim text-sm">({{ skill.source }})</span>
             </label>
             {% endfor %}

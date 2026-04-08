@@ -84,7 +84,6 @@ def task_form_new(
         {
             "task": None,
             "all_skills": all_skills,
-            "task_skill_ids": [],
             "task_skill_names": [],
             "env_vars_text": "",
         },
@@ -100,7 +99,7 @@ def task_create_form(
     model: str = Form("sonnet"),
     enabled: str = Form(""),
     env_vars: str = Form(""),
-    skill_ids: list[str] = Form(default=[]),
+    skill_names: list[str] = Form(default=[]),
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
@@ -114,8 +113,8 @@ def task_create_form(
         enabled=bool(enabled),
         env_vars=parsed_env,
     )
-    if skill_ids:
-        task_skill_crud.replace(session, task.id, skill_ids)
+    if skill_names:
+        task_skill_crud.replace(session, task.id, skill_names)
     return RedirectResponse("/ui/", status_code=303)
 
 
@@ -132,7 +131,14 @@ def task_detail(
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     runs = run_service.list(task_id=task_id)
-    task_skills = task_skill_crud.list_for_task(session, task_id)
+    skill_names = task_skill_crud.list_for_task(session, task_id)
+    skill_svc = SkillService(session)
+    task_skills = []
+    for sn in skill_names:
+        try:
+            task_skills.append(skill_svc.resolve(sn))
+        except SkillNotFoundError:
+            task_skills.append({"name": sn, "source": "unknown"})
     env_vars_keys: list[str] = []
     if task.env_vars:
         env_vars_keys = list(json.loads(task.env_vars).keys())
@@ -161,9 +167,7 @@ def task_edit_form(
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     all_skills = skill_service.list_all()
-    assigned = task_skill_crud.list_for_task(session, task_id)
-    task_skill_ids = [s.id for s in assigned]
-    task_skill_names = [s.name for s in assigned]
+    task_skill_names = task_skill_crud.list_for_task(session, task_id)
     env_vars_text = ""
     if task.env_vars:
         env = json.loads(task.env_vars)
@@ -174,7 +178,6 @@ def task_edit_form(
         {
             "task": task,
             "all_skills": all_skills,
-            "task_skill_ids": task_skill_ids,
             "task_skill_names": task_skill_names,
             "env_vars_text": env_vars_text,
         },
@@ -191,7 +194,7 @@ def task_update_form(
     model: str = Form("sonnet"),
     enabled: str = Form(""),
     env_vars: str = Form(""),
-    skill_ids: list[str] = Form(default=[]),
+    skill_names: list[str] = Form(default=[]),
     task_service: TaskService = Depends(get_task_service),
     session: Session = Depends(get_db),
 ):
@@ -209,7 +212,7 @@ def task_update_form(
         )
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
-    task_skill_crud.replace(session, task_id, skill_ids)
+    task_skill_crud.replace(session, task_id, skill_names)
     return RedirectResponse(f"/ui/tasks/{task_id}", status_code=303)
 
 
@@ -237,53 +240,55 @@ def skill_create_form(
     name: str = Form(...),
     description: str = Form(""),
     content: str = Form(...),
+    source: str = Form("local"),
     skill_service: SkillService = Depends(get_skill_service),
 ):
-    skill_service.create(name=name, description=description, content=content)
+    skill_service.create(
+        name=name, description=description, content=content, source=source
+    )
     return RedirectResponse("/ui/skills/", status_code=303)
 
 
-@router.get("/skills/{skill_id}", response_class=HTMLResponse)
+@router.get("/skills/{skill_name}", response_class=HTMLResponse)
 def skill_detail(
     request: Request,
-    skill_id: str,
+    skill_name: str,
     skill_service: SkillService = Depends(get_skill_service),
 ):
     try:
-        skill = skill_service.get(skill_id)
+        skill = skill_service.get(skill_name)
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
     return templates.TemplateResponse(request, "skill_detail.html", {"skill": skill})
 
 
-@router.get("/skills/{skill_id}/edit", response_class=HTMLResponse)
+@router.get("/skills/{skill_name}/edit", response_class=HTMLResponse)
 def skill_edit_form(
     request: Request,
-    skill_id: str,
+    skill_name: str,
     skill_service: SkillService = Depends(get_skill_service),
 ):
     try:
-        skill = skill_service.get(skill_id)
+        skill = skill_service.get(skill_name)
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
     return templates.TemplateResponse(request, "skill_form.html", {"skill": skill})
 
 
-@router.post("/skills/{skill_id}", response_class=HTMLResponse)
+@router.post("/skills/{skill_name}", response_class=HTMLResponse)
 def skill_update_form(
-    skill_id: str,
+    skill_name: str,
     name: str = Form(...),
     description: str = Form(""),
     content: str = Form(...),
     skill_service: SkillService = Depends(get_skill_service),
 ):
     try:
-        skill_service.update(
-            skill_id, name=name, description=description, content=content
-        )
+        fields = {"name": name, "description": description, "content": content}
+        skill_service.update(skill_name, **fields)
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
-    return RedirectResponse(f"/ui/skills/{skill_id}", status_code=303)
+    return RedirectResponse(f"/ui/skills/{name}", status_code=303)
 
 
 # ── Pipelines UI ──────────────────────────────────────

@@ -14,6 +14,7 @@ class SkillCreate(BaseModel):
     name: str
     description: str = ""
     content: str
+    source: SkillSource = SkillSource.local
 
 
 class SkillUpdate(BaseModel):
@@ -25,10 +26,7 @@ class SkillUpdate(BaseModel):
 class SkillResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
     name: str
     description: str
     content: str
-    source: SkillSource
-    created_at: str
-    updated_at: str
+    source: str = "local"
