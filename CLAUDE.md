@@ -170,7 +170,7 @@ def get_task_service(session: Session = Depends(get_db)) -> TaskService:
 
 ## macOS service
 
-The server runs as a launchd agent at `http://daruma.localhost:9090`:
+The server runs as a launchd agent on the configured host/port:
 - Plist at `~/Library/LaunchAgents/com.daruma.server.plist`
 - Auto-starts on login (`RunAtLoad`), auto-restarts on crash (`KeepAlive`)
 - `_find_project_root()` uses `git rev-parse --git-common-dir` to resolve the main repo (not a worktree)
