@@ -1,0 +1,14 @@
+services:
+  daruma:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - daruma-data:/data
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DARUMA_DATA_DIR=/data
+    restart: unless-stopped
+
+volumes:
+  daruma-data:

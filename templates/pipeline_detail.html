@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ pipeline.name }} — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>{{ pipeline.name }}</h1>
+    <div>
+        <button class="btn btn-sm" hx-post="/api/pipelines/{{ pipeline.id }}/run" hx-swap="none"
+                onclick="setTimeout(()=>location.reload(), 1000)">Run now</button>
+        <a href="/ui/pipelines/{{ pipeline.id }}/edit" class="btn btn-sm">Edit</a>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="/api/pipelines/{{ pipeline.id }}"
+                hx-confirm="Delete this pipeline?"
+                hx-swap="none"
+                onclick="setTimeout(()=>location.href='/ui/pipelines/', 500)">Delete</button>
+    </div>
+</div>
+
+<div class="card mt-1">
+    {% if pipeline.description %}
+        <div class="text-dim text-sm" style="margin-bottom:0.5rem;">Description</div>
+        <div style="margin-bottom:1rem;">{{ pipeline.description }}</div>
+    {% endif %}
+    <div class="text-dim text-sm" style="margin-bottom:0.5rem;">Steps</div>
+    {% if pipeline.steps %}
+        <ol style="margin:0; padding-left:1.5rem;">
+            {% for step in pipeline.steps %}
+                <li>{{ step.task.name }}</li>
+            {% endfor %}
+        </ol>
+    {% else %}
+        <div class="text-dim text-sm">No steps configured.</div>
+    {% endif %}
+    <div style="margin-top:1rem;">
+        {% if pipeline.enabled %}
+            <span class="badge badge-success">enabled</span>
+        {% else %}
+            <span class="badge badge-dim">disabled</span>
+        {% endif %}
+    </div>
+</div>
+
+<h2 class="mt-1">Pipeline Run History</h2>
+<table>
+    <thead><tr><th>Time</th><th>Status</th><th>Trigger</th><th>Duration</th><th>Steps completed</th></tr></thead>
+    <tbody>
+        {% for run in runs %}
+        <tr>
+            <td><a href="/ui/pipeline-runs/{{ run.id }}">{{ run.started_at[:19] }}</a></td>
+            <td>
+                {% if run.status == "success" %}
+                    <span class="badge badge-success">success</span>
+                {% elif run.status == "failed" %}
+                    <span class="badge badge-danger">failed</span>
+                {% else %}
+                    <span class="badge badge-warning">running</span>
+                {% endif %}
+            </td>
+            <td class="text-dim text-sm">{{ run.trigger }}</td>
+            <td class="text-dim text-sm">{{ (run.duration_ms / 1000)|round(1) if run.duration_ms else "—" }}s</td>
+            <td class="text-dim text-sm">{{ run.current_step if run.current_step is not none else "—" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not runs %}
+            <tr><td colspan="5" class="text-dim text-sm" style="text-align:center; padding:1rem;">
+                No runs yet.
+            </td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

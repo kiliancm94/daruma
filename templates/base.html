@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Daruma{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/marked@15.0.7/marked.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <div class="container flex-between">
+            <a href="/ui/" class="logo">Daruma</a>
+            <a href="/ui/pipelines/" class="text-dim text-sm" style="margin-left:1rem;">Pipelines</a>
+            <a href="/ui/skills/" class="text-dim text-sm" style="margin-left:1rem;">Skills</a>
+            <span class="text-dim text-sm">Claude Automations Runner</span>
+        </div>
+    </div>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ skill.name }} — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>{{ skill.name }}</h1>
+    <div>
+        <a href="/ui/skills/{{ skill.id }}/edit" class="btn btn-sm">Edit</a>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="/api/skills/{{ skill.id }}"
+                hx-confirm="Delete this skill?"
+                hx-swap="none"
+                onclick="setTimeout(()=>location.href='/ui/skills/', 500)">Delete</button>
+    </div>
+</div>
+<div class="card mt-1">
+    <div class="text-dim text-sm" style="margin-bottom:0.5rem;">Description</div>
+    <div>{{ skill.description or "—" }}</div>
+    <div class="text-dim text-sm" style="margin-top:1rem; margin-bottom:0.5rem;">Content</div>
+    <div class="md-content" id="skill-content"></div>
+    <script>
+        document.getElementById('skill-content').innerHTML =
+            marked.parse({{ skill.content | tojson }});
+    </script>
+</div>
+{% endblock %}

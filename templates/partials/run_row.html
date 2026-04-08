@@ -1,0 +1,14 @@
+<tr>
+    <td><a href="/ui/runs/{{ run.id }}">{{ run.started_at[:19] }}</a></td>
+    <td>
+        {% if run.status == "success" %}
+            <span class="badge badge-success">success</span>
+        {% elif run.status == "failed" %}
+            <span class="badge badge-danger">failed</span>
+        {% else %}
+            <span class="badge badge-warning">running</span>
+        {% endif %}
+    </td>
+    <td class="text-dim text-sm">{{ run.trigger }}</td>
+    <td class="text-dim text-sm">{{ (run.duration_ms / 1000)|round(1) if run.duration_ms else "—" }}s</td>
+</tr>

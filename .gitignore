@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+.env
+*.pem
+*credentials*
+*secret*
+/data/
+.python-version
+.worktrees/

@@ -1,0 +1,32 @@
+<tr id="task-{{ task.id }}">
+    <td><a href="/ui/tasks/{{ task.id }}">{{ task.name }}</a></td>
+    <td class="text-dim text-sm">{{ task.cron_expression or "—" }}</td>
+    <td>
+        {% if task.enabled %}
+            <span class="badge badge-success">enabled</span>
+        {% else %}
+            <span class="badge badge-dim">disabled</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if task.last_run %}
+            {% if task.last_run.status == "success" %}
+                <span class="badge badge-success">success</span>
+            {% elif task.last_run.status == "failed" %}
+                <span class="badge badge-danger">failed</span>
+            {% else %}
+                <span class="badge badge-warning">running…</span>
+            {% endif %}
+            <span class="text-dim text-sm">{{ task.last_run.started_at[:16] }}</span>
+        {% else %}
+            <span class="text-dim text-sm">—</span>
+        {% endif %}
+    </td>
+    <td>
+        <button class="btn btn-sm"
+                hx-post="/api/tasks/{{ task.id }}/run"
+                hx-swap="none">
+            Run now
+        </button>
+    </td>
+</tr>

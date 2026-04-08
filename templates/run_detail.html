@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Run — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>Run Detail</h1>
+    <a href="/ui/tasks/{{ run.task_id }}" class="btn btn-sm">Back to Task</a>
+</div>
+
+<div id="run-card"
+     {% if run.status == "running" %}
+     hx-get="/ui/runs/{{ run.id }}/card"
+     hx-trigger="every 3s"
+     hx-swap="innerHTML"
+     {% endif %}>
+    {% include "partials/run_card.html" %}
+</div>
+{% endblock %}

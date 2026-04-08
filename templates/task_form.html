@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{% if task %}Edit Task{% else %}New Task{% endif %} — Daruma{% endblock %}
+{% block content %}
+<h1>{% if task %}Edit Task{% else %}New Task{% endif %}</h1>
+<form method="post" action="/ui/tasks{% if task %}/{{ task.id }}{% endif %}" class="card">
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ task.name if task else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" name="prompt" required>{{ task.prompt if task else '' }}</textarea>
+    </div>
+    <div class="form-group">
+        <label for="cron_expression">Cron Expression <span class="text-dim">(optional)</span></label>
+        <input type="text" id="cron_expression" name="cron_expression"
+               value="{{ task.cron_expression if task and task.cron_expression else '' }}"
+               placeholder="0 8 * * 1-5">
+    </div>
+    <div class="form-group">
+        <label for="allowed_tools">Allowed Tools <span class="text-dim">(comma-separated, optional)</span></label>
+        <input type="text" id="allowed_tools" name="allowed_tools"
+               value="{{ task.allowed_tools if task and task.allowed_tools else '' }}"
+               placeholder="bash,read">
+    </div>
+    <div class="form-group">
+        <label for="model">Model</label>
+        <select id="model" name="model">
+            {% for m in ["sonnet", "opus", "haiku"] %}
+                <option value="{{ m }}" {{ 'selected' if (task and task.model == m) or (not task and m == 'sonnet') }}>{{ m }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="env_vars">Environment Variables <span class="text-dim">(one KEY=VALUE per line)</span></label>
+        <textarea id="env_vars" name="env_vars" rows="3" placeholder="API_KEY=secret&#10;TOKEN=abc123">{{ env_vars_text if env_vars_text else '' }}</textarea>
+    </div>
+    <div class="form-group">
+        <label>Skills</label>
+        <div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; padding:0.5rem;">
+            {% for skill in all_skills %}
+            <label style="display:block; margin-bottom:0.25rem;">
+                <input type="checkbox" name="skill_ids" value="{{ skill.id or skill.name }}"
+                       {{ 'checked' if skill.id in task_skill_ids or skill.name in task_skill_names }}>
+                {{ skill.name }} <span class="text-dim text-sm">({{ skill.source }})</span>
+            </label>
+            {% endfor %}
+            {% if not all_skills %}
+            <span class="text-dim text-sm">No skills available.</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="enabled" value="1" {{ 'checked' if not task or task.enabled }}>
+            Enabled
+        </label>
+    </div>
+    <button type="submit" class="btn btn-primary">{% if task %}Save{% else %}Create{% endif %}</button>
+    <a href="/ui/" class="btn">Cancel</a>
+</form>
+{% endblock %}

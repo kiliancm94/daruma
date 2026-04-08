@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Run {{ pipeline_run.id[:8] }} — Daruma{% endblock %}
+{% block content %}
+<h1>Pipeline Run <span class="text-dim">{{ pipeline_run.id[:8] }}</span></h1>
+
+<div class="card mt-1">
+    <div style="display:flex; gap:2rem; flex-wrap:wrap;">
+        <div><span class="text-dim text-sm">Pipeline:</span> <a href="/ui/pipelines/{{ pipeline_run.pipeline_id }}">{{ pipeline_run.pipeline.name }}</a></div>
+        <div><span class="text-dim text-sm">Status:</span>
+            {% if pipeline_run.status == "success" %}
+                <span class="badge badge-success">success</span>
+            {% elif pipeline_run.status == "failed" %}
+                <span class="badge badge-danger">failed</span>
+            {% else %}
+                <span class="badge badge-warning">running</span>
+            {% endif %}
+        </div>
+        <div><span class="text-dim text-sm">Trigger:</span> {{ pipeline_run.trigger }}</div>
+        <div><span class="text-dim text-sm">Duration:</span> {{ (pipeline_run.duration_ms / 1000)|round(1) if pipeline_run.duration_ms else "—" }}s</div>
+    </div>
+</div>
+
+<h2 class="mt-1">Steps</h2>
+<table>
+    <thead><tr><th>Step #</th><th>Task Name</th><th>Status</th><th>Duration</th><th></th></tr></thead>
+    <tbody>
+        {% for run in step_runs %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ run.task.name }}</td>
+            <td>
+                {% if run.status == "success" %}
+                    <span class="badge badge-success">success</span>
+                {% elif run.status == "failed" %}
+                    <span class="badge badge-danger">failed</span>
+                {% else %}
+                    <span class="badge badge-warning">running</span>
+                {% endif %}
+            </td>
+            <td class="text-dim text-sm">{{ (run.duration_ms / 1000)|round(1) if run.duration_ms else "—" }}s</td>
+            <td><a href="/ui/runs/{{ run.id }}" class="btn btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+        {% if not step_runs %}
+            <tr><td colspan="5" class="text-dim text-sm" style="text-align:center; padding:1rem;">
+                No step runs yet.
+            </td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

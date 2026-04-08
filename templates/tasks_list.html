@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Tasks — Daruma{% endblock %}
+{% block content %}
+<div class="flex-between">
+    <h1>Tasks</h1>
+    <a href="/ui/tasks/new" class="btn btn-primary">New Task</a>
+</div>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Schedule</th><th>Status</th><th>Last Run</th><th>Actions</th></tr>
+    </thead>
+    <tbody hx-get="/ui/" hx-trigger="every 5s" hx-select="tbody tr" hx-swap="innerHTML">
+        {% for task in tasks %}
+            {% include "partials/task_row.html" %}
+        {% endfor %}
+        {% if not tasks %}
+            <tr><td colspan="5" class="text-dim text-sm" style="text-align:center; padding:2rem;">
+                No tasks yet. Create one to get started.
+            </td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
