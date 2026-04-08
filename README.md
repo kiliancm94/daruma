@@ -9,12 +9,12 @@ Task scheduler for [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) 
 
 ## Why Daruma?
 
-Claude Code's built-in scheduling runs in the cloud — no access to your local calendar, MCP servers, or filesystem. Daruma runs on **your machine**, so your agents can use everything you can.
+Claude Code's built-in scheduling runs in the cloud, no access to your local calendar, MCP servers, or filesystem. Daruma runs on **your machine**, so your agents can use everything you can.
 
-- **Cron scheduling** — run tasks on any cron expression, manually, or via webhook
-- **Pipelines** — chain tasks sequentially, each step's output feeds the next step's prompt
-- **Skills** — reusable instruction sets (markdown files) attached to tasks as system prompts
-- **Web UI + CLI + API** — manage tasks however you prefer
+- **Cron scheduling**, run tasks on any cron expression, manually, or via webhook
+- **Pipelines**, chain tasks sequentially, each step's output feeds the next step's prompt
+- **Skills**, reusable instruction sets (markdown files) attached to tasks as system prompts
+- **Web UI + CLI + API**, manage tasks however you prefer
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ Open **http://localhost:8080/ui/** or use the CLI.
 | `DARUMA_DATA_DIR` | `./data` (local) / `/data` (Docker) | SQLite storage directory |
 | `DARUMA_PORT` | `8080` | Server port |
 | `DARUMA_HOST` | `0.0.0.0` | Bind address |
-| `ANTHROPIC_API_KEY` | — | Required for Claude CLI |
+| `ANTHROPIC_API_KEY` |, | Required for Claude CLI |
 
 ## Features
 
