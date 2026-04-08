@@ -110,7 +110,7 @@ def test_get_run_not_found(run_service):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/test_services.py -v`
+Run: `cd . && uv run pytest tests/test_services.py -v`
 Expected: FAIL — `app.services` does not exist
 
 **Step 3: Implement service layer**
@@ -289,7 +289,7 @@ def cancel_task_run(run_id: str, run_repo: RunRepo) -> None:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/test_services.py -v`
+Run: `cd . && uv run pytest tests/test_services.py -v`
 Expected: All PASS
 
 **Step 5: Commit**
@@ -512,7 +512,7 @@ Update `tests/test_api_tasks.py` to override `get_task_service` instead of `get_
 
 **Step 6: Run all tests**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/ -v`
+Run: `cd . && uv run pytest tests/ -v`
 Expected: All PASS
 
 **Step 7: Commit**
@@ -601,7 +601,7 @@ class TestTaskCommands:
 
 **Step 3: Run tests to verify they fail**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/test_cli.py -v`
+Run: `cd . && uv run pytest tests/test_cli.py -v`
 Expected: FAIL — `app.cli` does not exist
 
 **Step 4: Implement CLI**
@@ -865,12 +865,12 @@ daruma = "app.cli:cli"
 
 **Step 6: Run CLI tests**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/test_cli.py -v`
+Run: `cd . && uv run pytest tests/test_cli.py -v`
 Expected: All PASS
 
 **Step 7: Run all tests (regression)**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/ -v`
+Run: `cd . && uv run pytest tests/ -v`
 Expected: All PASS
 
 **Step 8: Commit**
@@ -896,7 +896,7 @@ Update to use `TaskService`/`RunService` instead of raw repos.
 
 **Step 2: Run all tests**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/ -v`
+Run: `cd . && uv run pytest tests/ -v`
 Expected: All PASS
 
 **Step 3: Commit**

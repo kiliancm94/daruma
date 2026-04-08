@@ -50,7 +50,7 @@ def parse_env_vars(cls, v):
 **Step 3: Create Alembic migration**
 
 ```bash
-cd /Users/kcanizares/vf/automations/daruma
+cd .
 source .venv/bin/activate && alembic revision -m "add env_vars to tasks"
 ```
 
@@ -630,7 +630,7 @@ Visit `http://localhost:8080/ui/`, create/edit a task with env vars, verify disp
 **Step 1: Set env var on the existing task via CLI**
 
 ```bash
-uv run daruma tasks edit "Morning Calendar Digest" --env "CALENDAR_TOKEN=$(cat /Users/kcanizares/vf/automations/calendar-api/.api-token)"
+uv run daruma tasks edit "Morning Calendar Digest" --env "CALENDAR_TOKEN=$(cat /path/to/your/api-token)"
 ```
 
 **Step 2: Run the task**

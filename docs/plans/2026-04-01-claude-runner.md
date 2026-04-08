@@ -116,7 +116,7 @@ PORT = 8080
 
 **Step 5: Install dependencies**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv sync --all-extras`
+Run: `cd . && uv sync --all-extras`
 
 **Step 6: Commit**
 
@@ -195,7 +195,7 @@ def test_runs_table_has_expected_columns(db_conn: sqlite3.Connection):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/test_db.py -v`
+Run: `cd . && uv run pytest tests/test_db.py -v`
 Expected: FAIL — `ModuleNotFoundError` or `ImportError` for `app.db`
 
 **Step 3: Write `app/db.py`**
@@ -1397,7 +1397,7 @@ def health():
 
 **Step 2: Smoke test**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run python -c "from app.main import app; print('App created:', app.title)"`
+Run: `cd . && uv run python -c "from app.main import app; print('App created:', app.title)"`
 Expected: `App created: Daruma — Claude Automations Runner`
 
 **Step 3: Run all tests**
@@ -2010,7 +2010,7 @@ git commit -m "feat: Dockerfile and docker-compose for single-container deployme
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/kcanizares/vf/automations/daruma && uv run pytest tests/ -v`
+Run: `cd . && uv run pytest tests/ -v`
 Expected: All tests pass (21+ tests)
 
 **Step 2: Manual smoke test**
