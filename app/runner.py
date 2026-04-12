@@ -9,6 +9,7 @@ from typing import Callable
 VALID_MODELS = ("sonnet", "opus", "haiku")
 DEFAULT_MODEL = "sonnet"
 
+
 def _find_claude() -> str:
     """Resolve claude CLI binary, searching common install paths for launchd contexts."""
     found = shutil.which("claude")

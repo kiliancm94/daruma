@@ -18,44 +18,50 @@ def get_skill_service(session: Session = Depends(get_db)) -> SkillService:
 
 @router.get("/skills", response_model=list[SkillResponse])
 def list_skills(skill_service: SkillService = Depends(get_skill_service)):
-    return skill_service.list_local()
+    return skill_service.list_all()
 
 
 @router.post("/skills", response_model=SkillResponse, status_code=201)
 def create_skill(
     body: SkillCreate, skill_service: SkillService = Depends(get_skill_service)
 ):
-    return skill_service.create(
-        name=body.name, description=body.description, content=body.content
-    )
-
-
-@router.get("/skills/{skill_id}", response_model=SkillResponse)
-def get_skill(skill_id: str, skill_service: SkillService = Depends(get_skill_service)):
     try:
-        return skill_service.get(skill_id)
+        return skill_service.create(
+            name=body.name,
+            description=body.description,
+            content=body.content,
+            source=body.source,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@router.get("/skills/{name}", response_model=SkillResponse)
+def get_skill(name: str, skill_service: SkillService = Depends(get_skill_service)):
+    try:
+        return skill_service.get(name)
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
 
 
-@router.put("/skills/{skill_id}", response_model=SkillResponse)
+@router.put("/skills/{name}", response_model=SkillResponse)
 def update_skill(
-    skill_id: str,
+    name: str,
     body: SkillUpdate,
     skill_service: SkillService = Depends(get_skill_service),
 ):
     try:
-        return skill_service.update(skill_id, **body.model_dump(exclude_unset=True))
+        return skill_service.update(name, **body.model_dump(exclude_unset=True))
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
-@router.delete("/skills/{skill_id}", status_code=204)
-def delete_skill(
-    skill_id: str, skill_service: SkillService = Depends(get_skill_service)
-):
+@router.delete("/skills/{name}", status_code=204)
+def delete_skill(name: str, skill_service: SkillService = Depends(get_skill_service)):
     try:
-        skill_service.delete(skill_id)
+        skill_service.delete(name)
     except SkillNotFoundError:
         raise HTTPException(404, "Skill not found")
     return Response(status_code=204)
@@ -65,17 +71,28 @@ def delete_skill(
 
 
 class TaskSkillsBody(BaseModel):
-    skill_ids: list[str]
+    skill_names: list[str]
 
 
 @router.get("/tasks/{task_id}/skills", response_model=list[SkillResponse])
-def list_task_skills(task_id: str, session: Session = Depends(get_db)):
-    return task_skill_crud.list_for_task(session, task_id)
+def list_task_skills(
+    task_id: str,
+    session: Session = Depends(get_db),
+):
+    skill_svc = SkillService(session)
+    names = task_skill_crud.list_for_task(session, task_id)
+    results = []
+    for n in names:
+        try:
+            results.append(skill_svc.resolve(n))
+        except SkillNotFoundError:
+            pass  # skill was deleted, skip
+    return results
 
 
 @router.put("/tasks/{task_id}/skills")
 def replace_task_skills(
     task_id: str, body: TaskSkillsBody, session: Session = Depends(get_db)
 ):
-    task_skill_crud.replace(session, task_id, body.skill_ids)
+    task_skill_crud.replace(session, task_id, body.skill_names)
     return {"status": "ok"}

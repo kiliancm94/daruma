@@ -18,8 +18,5 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     description: Mapped[str] = mapped_column(String, nullable=False, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    source: Mapped[str] = mapped_column(
-        String, nullable=False, default="local", server_default="local"
-    )
     created_at: Mapped[str] = mapped_column(String, nullable=False, default=utcnow)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, default=utcnow)

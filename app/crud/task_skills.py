@@ -2,35 +2,35 @@
 
 from sqlalchemy.orm import Session
 
-from app.models.skill import Skill
 from app.models.task_skill import TaskSkill
 
 
-def assign(session: Session, task_id: str, skill_id: str) -> None:
-    if not session.get(TaskSkill, (task_id, skill_id)):
-        session.add(TaskSkill(task_id=task_id, skill_id=skill_id))
+def assign(session: Session, task_id: str, skill_name: str) -> None:
+    if not session.get(TaskSkill, (task_id, skill_name)):
+        session.add(TaskSkill(task_id=task_id, skill_name=skill_name))
         session.commit()
 
 
-def unassign(session: Session, task_id: str, skill_id: str) -> None:
-    link = session.get(TaskSkill, (task_id, skill_id))
+def unassign(session: Session, task_id: str, skill_name: str) -> None:
+    link = session.get(TaskSkill, (task_id, skill_name))
     if link:
         session.delete(link)
         session.commit()
 
 
-def list_for_task(session: Session, task_id: str) -> list[Skill]:
-    return (
-        session.query(Skill)
-        .join(TaskSkill, TaskSkill.skill_id == Skill.id)
+def list_for_task(session: Session, task_id: str) -> list[str]:
+    """Return skill names assigned to a task."""
+    rows = (
+        session.query(TaskSkill.skill_name)
         .filter(TaskSkill.task_id == task_id)
-        .order_by(Skill.name)
+        .order_by(TaskSkill.skill_name)
         .all()
     )
+    return [r.skill_name for r in rows]
 
 
-def replace(session: Session, task_id: str, skill_ids: list[str]) -> None:
+def replace(session: Session, task_id: str, skill_names: list[str]) -> None:
     session.query(TaskSkill).filter(TaskSkill.task_id == task_id).delete()
-    for sid in skill_ids:
-        session.add(TaskSkill(task_id=task_id, skill_id=sid))
+    for name in skill_names:
+        session.add(TaskSkill(task_id=task_id, skill_name=name))
     session.commit()

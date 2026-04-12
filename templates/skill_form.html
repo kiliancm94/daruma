@@ -2,7 +2,7 @@
 {% block title %}{% if skill %}Edit Skill{% else %}New Skill{% endif %} — Daruma{% endblock %}
 {% block content %}
 <h1>{% if skill %}Edit Skill{% else %}New Skill{% endif %}</h1>
-<form method="post" action="/ui/skills{% if skill %}/{{ skill.id }}{% endif %}" class="card">
+<form method="post" action="/ui/skills{% if skill %}/{{ skill.name }}{% endif %}" class="card">
     <div class="form-group">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" value="{{ skill.name if skill else '' }}" required>
@@ -15,6 +15,17 @@
         <label for="content">Content <span class="text-dim">(markdown)</span></label>
         <textarea id="content" name="content" rows="12" required>{{ skill.content if skill else '' }}</textarea>
     </div>
+    {% if not skill %}
+    <div class="form-group">
+        <label>Source</label>
+        <label style="margin-right:1rem;">
+            <input type="radio" name="source" value="local" checked> Local
+        </label>
+        <label>
+            <input type="radio" name="source" value="global"> Global
+        </label>
+    </div>
+    {% endif %}
     <button type="submit" class="btn btn-primary">{% if skill %}Save{% else %}Create{% endif %}</button>
     <a href="/ui/skills/" class="btn">Cancel</a>
 </form>

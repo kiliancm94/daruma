@@ -12,7 +12,6 @@ from app.utils.date_helpers import utcnow
 
 if TYPE_CHECKING:
     from app.models.run import Run
-    from app.models.skill import Skill
 
 
 class Task(Base):
@@ -37,7 +36,4 @@ class Task(Base):
 
     runs: Mapped[list["Run"]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
-    )
-    skills: Mapped[list["Skill"]] = relationship(
-        "Skill", secondary="task_skills", backref="tasks"
     )

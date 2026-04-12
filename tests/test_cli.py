@@ -288,6 +288,19 @@ class TestSkillCommands:
         assert result.exit_code == 0
         assert "Imported skill: imported" in result.output
 
+    def test_create_global(self, runner, mock_db, tmp_path):
+        from unittest.mock import patch
+
+        with patch("app.services.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+            (tmp_path / "skills").mkdir()
+            result = runner.invoke(
+                cli,
+                ["skills", "create", "--name", "g", "--content", "c", "--global"],
+            )
+            assert result.exit_code == 0
+            assert "Created skill: g" in result.output
+            assert (tmp_path / "skills" / "g" / "SKILL.md").exists()
+
     def test_assign_to_task(self, runner, mock_db):
         runner.invoke(cli, ["tasks", "create", "--name", "T", "--prompt", "p"])
         runner.invoke(cli, ["skills", "create", "--name", "s", "--content", "c"])

@@ -1,6 +1,7 @@
 """Service layer — shared business logic for FastAPI routes and CLI."""
 
 import json
+import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,8 +21,8 @@ from app.models.run import Run
 from app.models.skill import Skill
 from app.models.pipeline import Pipeline
 from app.models.pipeline_run import PipelineRun
-from app.schemas.skill import SkillSource
 from app.schemas.pipeline import PipelineRunStatus, PipelineTrigger
+from app.schemas.skill import SkillResponse
 from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
 
@@ -41,9 +42,9 @@ class RunNotFoundError(Exception):
 
 
 class SkillNotFoundError(Exception):
-    def __init__(self, skill_id: str):
-        self.skill_id = skill_id
-        super().__init__(f"Skill not found: {skill_id}")
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(f"Skill not found: {name}")
 
 
 class PipelineNotFoundError(Exception):
@@ -152,28 +153,36 @@ def _parse_skill_frontmatter(path: Path) -> dict:
     }
 
 
+def _skill_to_response(skill: Skill) -> dict:
+    """Convert an ORM Skill to a dict using SkillResponse schema."""
+    return SkillResponse.model_validate(skill).model_dump()
+
+
+def _write_skill_file(name: str, description: str, content: str) -> None:
+    """Write ``GLOBAL_SKILLS_DIR / name / SKILL.md`` with YAML frontmatter."""
+    skill_dir = GLOBAL_SKILLS_DIR / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    body = f"---\nname: {name}\ndescription: {description}\n---\n{content}"
+    (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
+
+
+def _delete_skill_dir(name: str) -> None:
+    """Remove ``GLOBAL_SKILLS_DIR / name /`` directory."""
+    skill_dir = GLOBAL_SKILLS_DIR / name
+    if skill_dir.exists():
+        shutil.rmtree(skill_dir)
+
+
 class SkillService:
-    """Service layer for skill management (local DB + global filesystem)."""
+    """Service layer for skill management — routes between filesystem (global) and DB (local)."""
 
     def __init__(self, session: Session):
         self.session = session
 
-    def create(self, name: str, description: str = "", content: str = "") -> Skill:
-        return skill_crud.create(
-            self.session, name=name, description=description, content=content
-        )
+    # ── Private helpers ────────────────────────────────────────────────────
 
-    def get(self, skill_id: str) -> Skill:
-        skill = skill_crud.get(self.session, skill_id)
-        if not skill:
-            raise SkillNotFoundError(skill_id)
-        return skill
-
-    def list_local(self) -> list[Skill]:
-        return skill_crud.get_all(self.session)
-
-    def list_global(self) -> list[dict]:
-        """Discover skills from ~/.claude/skills/."""
+    def _list_global_raw(self) -> list[dict]:
+        """Scan the filesystem for global skills."""
         results: list[dict] = []
         if not GLOBAL_SKILLS_DIR.exists():
             return results
@@ -186,67 +195,121 @@ class SkillService:
                     results.append(
                         {
                             **_parse_skill_frontmatter(skill_file),
-                            "source": SkillSource.global_,
+                            "source": "global",
                             "path": str(skill_file),
                         }
                     )
                     break
         return results
 
-    def sync_global(self) -> dict:
-        """Sync global skills from ~/.claude/skills/ into DB. Returns counts."""
-        created, updated, unchanged = 0, 0, 0
-        for global_skill in self.list_global():
-            existing = skill_crud.get_by_name(self.session, global_skill["name"])
-            if existing:
-                if (
-                    existing.content != global_skill["content"]
-                    or existing.description != global_skill["description"]
-                ):
-                    skill_crud.update(
-                        self.session,
-                        existing.id,
-                        content=global_skill["content"],
-                        description=global_skill["description"],
-                    )
-                    updated += 1
-                else:
-                    unchanged += 1
-            else:
-                skill_crud.create(
-                    self.session,
-                    name=global_skill["name"],
-                    description=global_skill.get("description", ""),
-                    content=global_skill["content"],
-                    source=SkillSource.global_,
-                )
-                created += 1
-        return {"created": created, "updated": updated, "unchanged": unchanged}
+    def _check_name_available(self, name: str) -> None:
+        """Raise ``ValueError`` if *name* is already taken in either backend."""
+        # Check global
+        for g in self._list_global_raw():
+            if g["name"] == name:
+                raise ValueError(f"Skill name already taken: {name}")
+        # Check local
+        if skill_crud.get_by_name(self.session, name) is not None:
+            raise ValueError(f"Skill name already taken: {name}")
+
+    def _update_global(self, existing: dict, **fields) -> dict:
+        """Update a global skill on disk. Handles rename (delete old + write new)."""
+        new_name = fields.get("name", existing["name"])
+        new_desc = fields.get("description", existing["description"])
+        new_content = fields.get("content", existing["content"])
+
+        if new_name != existing["name"]:
+            _delete_skill_dir(existing["name"])
+        _write_skill_file(new_name, new_desc, new_content)
+
+        return {
+            "name": new_name,
+            "description": new_desc,
+            "content": f"---\nname: {new_name}\ndescription: {new_desc}\n---\n{new_content}",
+            "source": "global",
+            "path": str(GLOBAL_SKILLS_DIR / new_name / "SKILL.md"),
+        }
+
+    def _update_local(self, existing: dict, **fields) -> dict:
+        """Update a local (DB) skill."""
+        try:
+            updated = skill_crud.update(self.session, existing["id"], **fields)
+        except NotFoundError:
+            raise SkillNotFoundError(existing["name"])
+        return _skill_to_response(updated)
+
+    # ── Public API ─────────────────────────────────────────────────────────
+
+    def resolve(self, name: str) -> dict:
+        """Look up a skill by name — filesystem first, then DB.
+
+        Raises ``SkillNotFoundError`` if not found in either backend.
+        """
+        for g in self._list_global_raw():
+            if g["name"] == name:
+                return g
+        local = skill_crud.get_by_name(self.session, name)
+        if local:
+            return _skill_to_response(local)
+        raise SkillNotFoundError(name)
+
+    def get(self, name: str) -> dict:
+        """Alias for :meth:`resolve`."""
+        return self.resolve(name)
+
+    def create(
+        self,
+        name: str,
+        description: str = "",
+        content: str = "",
+        source: str = "local",
+    ) -> dict:
+        """Create a skill in the appropriate backend. Returns a dict."""
+        self._check_name_available(name)
+        if source == "global":
+            _write_skill_file(name, description, content)
+            return {
+                "name": name,
+                "description": description,
+                "content": f"---\nname: {name}\ndescription: {description}\n---\n{content}",
+                "source": "global",
+                "path": str(GLOBAL_SKILLS_DIR / name / "SKILL.md"),
+            }
+        skill = skill_crud.create(
+            self.session, name=name, description=description, content=content
+        )
+        return _skill_to_response(skill)
+
+    def update(self, current_name: str, **fields) -> dict:
+        """Update a skill by name — resolves to the correct backend first."""
+        existing = self.resolve(current_name)
+        if existing["source"] == "global":
+            return self._update_global(existing, **fields)
+        return self._update_local(existing, **fields)
+
+    def delete(self, name: str) -> None:
+        """Delete a skill by name — resolves to the correct backend first."""
+        existing = self.resolve(name)
+        if existing["source"] == "global":
+            _delete_skill_dir(existing["name"])
+            return
+        try:
+            skill_crud.delete(self.session, existing["id"])
+        except NotFoundError:
+            raise SkillNotFoundError(name)
+
+    def list_local(self) -> list[dict]:
+        """Return all DB-backed (local) skills as dicts."""
+        return [_skill_to_response(s) for s in skill_crud.get_all(self.session)]
+
+    def list_global(self) -> list[dict]:
+        """Return all filesystem-backed (global) skills as dicts."""
+        return self._list_global_raw()
 
     def list_all(self) -> list[dict]:
-        """Unified list: all DB skills (local + synced global)."""
-        return [
-            {
-                "id": s.id,
-                "name": s.name,
-                "description": s.description,
-                "source": s.source,
-                "content": s.content,
-            }
-            for s in self.list_local()
-        ]
-
-    def update(self, skill_id: str, **fields) -> Skill:
-        try:
-            return skill_crud.update(self.session, skill_id, **fields)
-        except NotFoundError:
-            raise SkillNotFoundError(skill_id)
-
-    def delete(self, skill_id: str) -> None:
-        try:
-            skill_crud.delete(self.session, skill_id)
-        except NotFoundError:
-            raise SkillNotFoundError(skill_id)
+        """Merge local + global skills, sorted by name."""
+        merged = self.list_local() + self.list_global()
+        return sorted(merged, key=lambda s: s["name"])
 
 
 class PipelineService:
@@ -402,8 +465,14 @@ def execute_task(
             run_crud.update_output(session, run_id, stdout, activity)
 
     try:
-        skills = task_skill_crud.list_for_task(session, task.id)
-        system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+        skill_names = task_skill_crud.list_for_task(session, task.id)
+        if skill_names:
+            skill_svc = SkillService(session)
+            system_prompt = "\n\n".join(
+                skill_svc.resolve(n)["content"] for n in skill_names
+            )
+        else:
+            system_prompt = None
         env_vars = json.loads(task.env_vars) if task.env_vars else None
 
         result = runner(
@@ -471,8 +540,14 @@ def _background_worker(
 ) -> None:
     session = session_factory()
     try:
-        skills = task_skill_crud.list_for_task(session, task.id)
-        system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+        skill_names = task_skill_crud.list_for_task(session, task.id)
+        if skill_names:
+            skill_svc = SkillService(session)
+            system_prompt = "\n\n".join(
+                skill_svc.resolve(n)["content"] for n in skill_names
+            )
+        else:
+            system_prompt = None
         env_vars = json.loads(task.env_vars) if task.env_vars else None
 
         result = runner(
@@ -564,8 +639,14 @@ def execute_pipeline(
         run_id = run.id
 
         try:
-            skills = task_skill_crud.list_for_task(session, task.id)
-            system_prompt = "\n\n".join(s.content for s in skills) if skills else None
+            skill_names = task_skill_crud.list_for_task(session, task.id)
+            if skill_names:
+                skill_svc = SkillService(session)
+                system_prompt = "\n\n".join(
+                    skill_svc.resolve(n)["content"] for n in skill_names
+                )
+            else:
+                system_prompt = None
             env_vars = json.loads(task.env_vars) if task.env_vars else None
 
             result = runner(
@@ -678,10 +759,14 @@ def _pipeline_background_worker(
             run_id = run.id
 
             try:
-                skills = task_skill_crud.list_for_task(session, task.id)
-                system_prompt = (
-                    "\n\n".join(s.content for s in skills) if skills else None
-                )
+                skill_names = task_skill_crud.list_for_task(session, task.id)
+                if skill_names:
+                    skill_svc = SkillService(session)
+                    system_prompt = "\n\n".join(
+                        skill_svc.resolve(n)["content"] for n in skill_names
+                    )
+                else:
+                    system_prompt = None
                 env_vars = json.loads(task.env_vars) if task.env_vars else None
 
                 result = runner(

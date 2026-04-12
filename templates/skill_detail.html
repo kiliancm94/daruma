@@ -4,9 +4,9 @@
 <div class="flex-between">
     <h1>{{ skill.name }}</h1>
     <div>
-        <a href="/ui/skills/{{ skill.id }}/edit" class="btn btn-sm">Edit</a>
+        <a href="/ui/skills/{{ skill.name }}/edit" class="btn btn-sm">Edit</a>
         <button class="btn btn-sm btn-danger"
-                hx-delete="/api/skills/{{ skill.id }}"
+                hx-delete="/api/skills/{{ skill.name }}"
                 hx-confirm="Delete this skill?"
                 hx-swap="none"
                 onclick="setTimeout(()=>location.href='/ui/skills/', 500)">Delete</button>

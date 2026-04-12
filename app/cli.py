@@ -14,7 +14,6 @@ from app.db import init_db, get_session
 from app.runner import VALID_MODELS, DEFAULT_MODEL
 from app.schemas.task import TaskResponse, OutputFormat, OutputDestination
 from app.schemas.run import RunResponse
-from app.crud import skills as skill_crud
 from app.crud import task_skills as task_skill_crud
 from app.services import (
     TaskService,
@@ -23,6 +22,7 @@ from app.services import (
     PipelineService,
     TaskNotFoundError,
     RunNotFoundError,
+    SkillNotFoundError,
     PipelineNotFoundError,
     execute_task,
     execute_pipeline,
@@ -270,14 +270,15 @@ def edit_task(
         task_name = updated.name
     if skill_names is not None:
         names = [n.strip() for n in skill_names.split(",") if n.strip()]
-        skill_ids = []
+        # Validate each skill exists
+        skill_service = SkillService(session)
         for sn in names:
-            sk = skill_crud.get_by_name(session, sn)
-            if not sk:
+            try:
+                skill_service.resolve(sn)
+            except SkillNotFoundError:
                 click.echo(f"Skill not found: {sn}", err=True)
                 raise SystemExit(1)
-            skill_ids.append(sk.id)
-        task_skill_crud.replace(session, task_pk, skill_ids)
+        task_skill_crud.replace(session, task_pk, names)
     session.close()
     click.echo(f"Updated task: {task_name} ({task_pk[:8]})")
 
@@ -405,10 +406,7 @@ def list_skills(show_all, as_json):
     if show_all:
         items = skill_service.list_all()
     else:
-        items = [
-            {"name": s.name, "description": s.description, "source": s.source}
-            for s in skill_service.list_local()
-        ]
+        items = skill_service.list_local()
     session.close()
     if not items:
         click.echo("No skills found.")
@@ -429,11 +427,20 @@ def list_skills(show_all, as_json):
 @click.option("--name", required=True, help="Skill name")
 @click.option("--description", default="", help="Short description")
 @click.option("--content", required=True, help="Skill content (markdown)")
-def create_skill(name, description, content):
+@click.option(
+    "--global",
+    "is_global",
+    is_flag=True,
+    help="Create as global skill in ~/.claude/skills/",
+)
+def create_skill(name, description, content, is_global):
     """Create a new skill."""
     session = _connect()
     skill_service = SkillService(session)
-    skill_service.create(name=name, description=description, content=content)
+    source = "global" if is_global else "local"
+    skill_service.create(
+        name=name, description=description, content=content, source=source
+    )
     session.close()
     click.echo(f"Created skill: {name}")
 
@@ -443,15 +450,17 @@ def create_skill(name, description, content):
 def show_skill(name):
     """Show skill details and content."""
     session = _connect()
-    skill = skill_crud.get_by_name(session, name)
-    if not skill:
+    skill_service = SkillService(session)
+    try:
+        skill = skill_service.get(name)
+    except SkillNotFoundError:
         click.echo(f"Skill not found: {name}", err=True)
         session.close()
         raise SystemExit(1)
-    click.echo(f"Name:        {skill.name}")
-    click.echo(f"Description: {skill.description}")
-    click.echo(f"Source:      {skill.source}")
-    click.echo(f"\n--- content ---\n{skill.content}")
+    click.echo(f"Name:        {skill['name']}")
+    click.echo(f"Description: {skill['description']}")
+    click.echo(f"Source:      {skill['source']}")
+    click.echo(f"\n--- content ---\n{skill['content']}")
     session.close()
 
 
@@ -461,14 +470,16 @@ def show_skill(name):
 def delete_skill(name, yes):
     """Delete a skill."""
     session = _connect()
-    skill = skill_crud.get_by_name(session, name)
-    if not skill:
+    skill_service = SkillService(session)
+    try:
+        skill_service.get(name)  # verify it exists
+    except SkillNotFoundError:
         click.echo(f"Skill not found: {name}", err=True)
         session.close()
         raise SystemExit(1)
     if not yes:
         click.confirm(f"Delete skill '{name}'?", abort=True)
-    skill_crud.delete(session, skill.id)
+    skill_service.delete(name)
     session.close()
     click.echo(f"Deleted skill: {name}")
 
@@ -489,20 +500,6 @@ def import_skill(file_path):
     )
     session.close()
     click.echo(f"Imported skill: {parsed['name']}")
-
-
-@skills.command("sync")
-def sync_skills():
-    """Sync global skills from ~/.claude/skills/ into the database."""
-    session = _connect()
-    skill_service = SkillService(session)
-    result = skill_service.sync_global()
-    session.close()
-    click.echo(
-        f"Synced: {result['created']} created, "
-        f"{result['updated']} updated, "
-        f"{result['unchanged']} unchanged"
-    )
 
 
 # ── Pipelines ──────────────────────────────────────────
