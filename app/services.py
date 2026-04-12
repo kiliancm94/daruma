@@ -22,6 +22,7 @@ from app.models.skill import Skill
 from app.models.pipeline import Pipeline
 from app.models.pipeline_run import PipelineRun
 from app.schemas.pipeline import PipelineRunStatus, PipelineTrigger
+from app.schemas.skill import SkillResponse
 from app.schemas.task import OutputFormat, OutputDestination
 from app.runner import run_claude, cancel_run
 
@@ -152,15 +153,9 @@ def _parse_skill_frontmatter(path: Path) -> dict:
     }
 
 
-def _local_to_dict(skill: Skill) -> dict:
-    """Convert an ORM Skill to a dict with ``"source": "local"`` and ``"id"`` key."""
-    return {
-        "id": skill.id,
-        "name": skill.name,
-        "description": skill.description,
-        "content": skill.content,
-        "source": "local",
-    }
+def _skill_to_response(skill: Skill) -> dict:
+    """Convert an ORM Skill to a dict using SkillResponse schema."""
+    return SkillResponse.model_validate(skill).model_dump()
 
 
 def _write_skill_file(name: str, description: str, content: str) -> None:
@@ -241,7 +236,7 @@ class SkillService:
             updated = skill_crud.update(self.session, existing["id"], **fields)
         except NotFoundError:
             raise SkillNotFoundError(existing["name"])
-        return _local_to_dict(updated)
+        return _skill_to_response(updated)
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -255,7 +250,7 @@ class SkillService:
                 return g
         local = skill_crud.get_by_name(self.session, name)
         if local:
-            return _local_to_dict(local)
+            return _skill_to_response(local)
         raise SkillNotFoundError(name)
 
     def get(self, name: str) -> dict:
@@ -283,7 +278,7 @@ class SkillService:
         skill = skill_crud.create(
             self.session, name=name, description=description, content=content
         )
-        return _local_to_dict(skill)
+        return _skill_to_response(skill)
 
     def update(self, current_name: str, **fields) -> dict:
         """Update a skill by name — resolves to the correct backend first."""
@@ -305,7 +300,7 @@ class SkillService:
 
     def list_local(self) -> list[dict]:
         """Return all DB-backed (local) skills as dicts."""
-        return [_local_to_dict(s) for s in skill_crud.get_all(self.session)]
+        return [_skill_to_response(s) for s in skill_crud.get_all(self.session)]
 
     def list_global(self) -> list[dict]:
         """Return all filesystem-backed (global) skills as dicts."""

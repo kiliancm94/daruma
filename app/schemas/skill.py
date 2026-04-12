@@ -26,7 +26,8 @@ class SkillUpdate(BaseModel):
 class SkillResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: str | None = None
     name: str
     description: str
     content: str
-    source: str = "local"
+    source: SkillSource = SkillSource.local

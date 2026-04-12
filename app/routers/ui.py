@@ -134,11 +134,11 @@ def task_detail(
     skill_names = task_skill_crud.list_for_task(session, task_id)
     skill_svc = SkillService(session)
     task_skills = []
-    for sn in skill_names:
+    for skill_name in skill_names:
         try:
-            task_skills.append(skill_svc.resolve(sn))
+            task_skills.append(skill_svc.resolve(skill_name))
         except SkillNotFoundError:
-            task_skills.append({"name": sn, "source": "unknown"})
+            task_skills.append({"name": skill_name, "source": "unknown"})
     env_vars_keys: list[str] = []
     if task.env_vars:
         env_vars_keys = list(json.loads(task.env_vars).keys())
