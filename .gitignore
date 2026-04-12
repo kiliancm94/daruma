@@ -10,3 +10,15 @@ dist/
 /data/
 .python-version
 .worktrees/
+
+# Editor / tool caches
+.claude/
+.ruff_cache/
+.pytest_cache/
+
+# SQLite WAL/SHM files (if DB is outside /data/)
+*.db-shm
+*.db-wal
+
+# macOS
+.DS_Store

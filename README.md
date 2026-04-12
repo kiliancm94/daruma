@@ -37,15 +37,15 @@ uv run daruma service install
 docker compose up --build
 ```
 
-Open **http://localhost:8080/ui/** or use the CLI.
+Open **http://localhost:9090/ui/** (or port 8080 with Docker) or use the CLI.
 
 ## Configuration
 
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `DARUMA_DATA_DIR` | `./data` (local) / `/data` (Docker) | SQLite storage directory |
-| `DARUMA_PORT` | `8080` | Server port |
-| `DARUMA_HOST` | `0.0.0.0` | Bind address |
+| `DARUMA_PORT` | `9090` | Server port |
+| `DARUMA_HOST` | `127.0.0.1` | Bind address (loopback only) |
 | `ANTHROPIC_API_KEY` | — | Required for Claude CLI |
 
 ## Features
@@ -64,7 +64,7 @@ daruma tasks create --name "daily-digest" \
 daruma run daily-digest
 
 # Trigger via webhook
-curl -X POST http://localhost:8080/api/trigger/daily-digest
+curl -X POST http://localhost:9090/api/trigger/daily-digest
 ```
 
 ### Skills
@@ -81,7 +81,7 @@ Skills are markdown files in `~/.claude/skills/{name}/SKILL.md` with YAML frontm
 Attach skills to a task via the web UI or API:
 
 ```bash
-curl -X PUT http://localhost:8080/api/tasks/{id}/skills \
+curl -X PUT http://localhost:9090/api/tasks/{id}/skills \
   -H "Content-Type: application/json" \
   -d '{"skill_ids": ["skill-uuid-1", "skill-uuid-2"]}'
 ```
@@ -161,6 +161,20 @@ Tasks can be referenced by full ID, partial ID prefix, or name.
 | POST | `/api/runs/{id}/cancel` | Cancel running task |
 | **Health** | | |
 | GET | `/health` | Health check |
+
+## Security
+
+Daruma is designed to run **locally on your machine**. It binds to `127.0.0.1` by default and has **no authentication**. Do not expose it to the public internet.
+
+Key considerations:
+
+- **No auth** — anyone who can reach the server can create tasks and run Claude CLI commands
+- **Auto-permission mode** — tasks run `claude -p --permission-mode auto`, granting the agent full tool access
+- **Env vars** — task environment variables are stored in the SQLite database; keep the `data/` directory private
+
+If you need remote access, put Daruma behind an authenticating reverse proxy.
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
 ## Architecture
 
