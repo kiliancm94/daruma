@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import DB_PATH
 from app.crud import tasks as task_crud
 from app.db import init_db, get_session, dispose
-from app.scheduler import create_scheduler, sync_jobs
+from app import scheduler
 from app.services import execute_task
 from app.routers import tasks as tasks_router
 from app.routers import runs as runs_router
@@ -17,8 +17,6 @@ from app.routers import triggers as triggers_router
 from app.routers import pipelines as pipelines_router
 from app.routers import pipeline_triggers as pipeline_triggers_router
 from app.routers import ui as ui_router
-
-_scheduler = None
 
 
 def _execute_cron_task(task_id: str) -> None:
@@ -32,25 +30,22 @@ def _execute_cron_task(task_id: str) -> None:
         session.close()
 
 
-def _refresh_scheduler() -> None:
-    if _scheduler:
-        session = get_session()
-        try:
-            tasks = task_crud.get_all(session)
-            sync_jobs(_scheduler, tasks, _execute_cron_task)
-        finally:
-            session.close()
+def _get_all_tasks() -> list:
+    session = get_session()
+    try:
+        return task_crud.get_all(session)
+    finally:
+        session.close()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _scheduler
     init_db(DB_PATH)
-    _scheduler = create_scheduler()
-    _refresh_scheduler()
-    _scheduler.start()
+    sched = scheduler.init_scheduler(_execute_cron_task, _get_all_tasks)
+    scheduler.refresh()
+    sched.start()
     yield
-    _scheduler.shutdown()
+    scheduler.shutdown()
     dispose()
 
 

@@ -1,15 +1,43 @@
+from typing import Callable
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+_scheduler: BackgroundScheduler | None = None
+_execute_fn: Callable | None = None
+_get_tasks_fn: Callable | None = None
 
-def create_scheduler() -> BackgroundScheduler:
-    return BackgroundScheduler()
+
+def init_scheduler(
+    execute_fn: Callable,
+    get_tasks_fn: Callable,
+) -> BackgroundScheduler:
+    """Create the scheduler and store callbacks for refresh()."""
+    global _scheduler, _execute_fn, _get_tasks_fn
+    _scheduler = BackgroundScheduler()
+    _execute_fn = execute_fn
+    _get_tasks_fn = get_tasks_fn
+    return _scheduler
 
 
-def sync_jobs(
+def refresh() -> None:
+    """Re-sync scheduler jobs from the current task list."""
+    if _scheduler and _get_tasks_fn and _execute_fn:
+        _sync_jobs(_scheduler, _get_tasks_fn(), _execute_fn)
+
+
+def shutdown() -> None:
+    """Shut down the scheduler."""
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown()
+        _scheduler = None
+
+
+def _sync_jobs(
     scheduler: BackgroundScheduler,
     tasks: list,
-    execute_fn,
+    execute_fn: Callable,
 ) -> None:
     existing_job_ids = {job.id for job in scheduler.get_jobs()}
     desired_job_ids = set()
