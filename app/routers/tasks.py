@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app import scheduler
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
 from app.services import TaskService, TaskNotFoundError
 
@@ -21,7 +22,7 @@ def list_tasks(task_service: TaskService = Depends(get_task_service)):
 def create_task(
     body: TaskCreate, task_service: TaskService = Depends(get_task_service)
 ):
-    return task_service.create(
+    task = task_service.create(
         name=body.name,
         prompt=body.prompt,
         cron_expression=body.cron_expression,
@@ -30,6 +31,8 @@ def create_task(
         enabled=body.enabled,
         env_vars=body.env_vars,
     )
+    scheduler.refresh()
+    return task
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -47,9 +50,11 @@ def update_task(
     task_service: TaskService = Depends(get_task_service),
 ):
     try:
-        return task_service.update(task_id, **body.model_dump(exclude_unset=True))
+        task = task_service.update(task_id, **body.model_dump(exclude_unset=True))
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
+    scheduler.refresh()
+    return task
 
 
 @router.delete("/{task_id}", status_code=204)
@@ -58,4 +63,5 @@ def delete_task(task_id: str, task_service: TaskService = Depends(get_task_servi
         task_service.delete(task_id)
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
+    scheduler.refresh()
     return Response(status_code=204)

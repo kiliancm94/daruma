@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app import scheduler
 from app.crud import task_skills as task_skill_crud
 from app.utils.env_vars import parse_env_text
 from app.schemas.task import TaskResponse
@@ -115,6 +116,7 @@ def task_create_form(
     )
     if skill_names:
         task_skill_crud.replace(session, task.id, skill_names)
+    scheduler.refresh()
     return RedirectResponse("/ui/", status_code=303)
 
 
@@ -213,6 +215,7 @@ def task_update_form(
     except TaskNotFoundError:
         raise HTTPException(404, "Task not found")
     task_skill_crud.replace(session, task_id, skill_names)
+    scheduler.refresh()
     return RedirectResponse(f"/ui/tasks/{task_id}", status_code=303)
 
 
